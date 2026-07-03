@@ -11,7 +11,7 @@ BO.CFG = {
   FIRE_GAP: 0.052,        // seconds between launched balls
   TRAIL_LEN: 6,
   HUD_H: 116,             // below safe-area top
-  BOOST_H: 216,           // bottom strip: aim slider + boosters (above safe-area bottom)
+  BOOST_H: 148,           // bottom booster strip (above safe-area bottom)
   BOOSTER_COST: 100,
   MAX_SHAKE: 16,
   GUIDE_LEN: 1500,
