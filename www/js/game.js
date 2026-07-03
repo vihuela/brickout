@@ -38,6 +38,8 @@
     this.overlay = null;
     this.banner = 1.6;             // LEVEL N banner timer
     this.autoT = 0;
+    this.heat = 0;                 // 0..1 combo heat -> flaming score
+    this.emberT = 0;
   };
 
   BO.GameScene.prototype = {
@@ -183,6 +185,7 @@
       if (b.hp <= 0) return;
       b.hp -= dmg;
       b.flash = 1;
+      b.glow = 1.6;                 // lingering neon edge
       this.score += dmg;
       if (!silent) BO.audio.hit(this.comboCount);
       if (b.hp <= 0) this.breakBrick(b, px, py);
@@ -194,18 +197,22 @@
       this.bricks.splice(i, 1);
       delete this.grid[b.r + ',' + b.c];
       this.comboCount++;
+      this.heat = Math.min(1, this.heat + 0.09);
       const r = this.brickRect(b);
       const col = BO.PAL.tiers[b.tier];
       BO.fx.shards(r.x + r.s / 2, r.y + r.s / 2, r.s, r.s, col, 10);
-      BO.fx.sparks(px || r.x + r.s / 2, py || r.y + r.s / 2, '#ffffff', 4, 300);
+      BO.fx.flare(px || r.x + r.s / 2, py || r.y + r.s / 2, 20 + this.heat * 14);
       BO.fx.ring(r.x + r.s / 2, r.y + r.s / 2, col, 8, r.s * 0.9);
       BO.fx.addShake(1.6);
+      if (this.heat > 0.5) BO.fx.addEdge(0.10);
       BO.audio.brickBreak();
       // combo popups
       while (this.comboIdx < BO.COMBOS.length && this.comboCount >= BO.COMBOS[this.comboIdx].at) {
         const cb = BO.COMBOS[this.comboIdx];
         BO.fx.combo(cb.txt, this.W / 2, this.boardTop + (this.launchY - this.boardTop) * 0.42);
         BO.fx.addShake(5);
+        BO.fx.addEdge(0.45);
+        this.heat = Math.min(1, this.heat + 0.25);
         BO.audio.combo(this.comboIdx);
         this.comboIdx++;
       }
@@ -242,10 +249,12 @@
       const dmg = Math.max(1, Math.round(this.data.hpUnit * 0.6));
       const cy = this.boardTop + row * this.cell + this.cell / 2;
       const cx = col * this.cell + this.cell / 2;
-      BO.fx.bolt(0, cy, this.W, cy);
-      BO.fx.bolt(cx, this.boardTop, cx, this.launchY);
-      BO.fx.addFlash(0.22);
+      BO.fx.laser(0, cy, this.W, cy);
+      BO.fx.laser(cx, this.boardTop, cx, this.launchY);
+      BO.fx.flare(cx, cy, 40);
+      BO.fx.addFlash(0.18);
       BO.fx.addShake(7);
+      BO.fx.addEdge(0.5);
       BO.audio.lightning();
       const hitList = this.bricks.filter(b => b.r === row || b.c === col);
       for (const b of hitList) {
@@ -267,10 +276,17 @@
       BO.store.gems -= CFG.BOOSTER_COST;
       if (kind === 'bolt') {
         const dmg = this.data.hpUnit;
-        BO.fx.addFlash(0.3);
+        BO.fx.addFlash(0.25);
         BO.fx.addShake(10);
+        BO.fx.addEdge(0.8);
         BO.audio.lightning();
-        for (let i = 0; i < 5; i++) {
+        // laser sweep across all brick rows + a few bolts for texture
+        const rowsHit = [...new Set(this.bricks.map(b => b.r))];
+        for (const r of rowsHit.slice(0, 8)) {
+          const cy = this.boardTop + r * this.cell + this.cell / 2;
+          BO.fx.laser(0, cy, this.W, cy);
+        }
+        for (let i = 0; i < 3; i++) {
           BO.fx.bolt(BO.rand(0, this.W), this.boardTop, BO.rand(0, this.W), this.launchY - BO.rand(0, 200));
         }
         const list = this.bricks.slice();
@@ -435,7 +451,8 @@
           b.vx *= k; b.vy *= k;
         }
         this.damageBrick(br, 1, px, py);
-        BO.fx.sparks(px, py, 'rgba(255,255,255,0.9)', 2, 200);
+        if (Math.random() < 0.3) BO.fx.flare(px, py, 10, '#cfeaff');
+        else BO.fx.sparks(px, py, 'rgba(255,255,255,0.9)', 2, 200);
       }
     },
 
@@ -443,10 +460,16 @@
     update(dt) {
       this.t += dt;
       BO.fx.update(dt);
-      for (const b of this.bricks) b.flash = Math.max(0, b.flash - dt * 5);
+      for (const b of this.bricks) {
+        b.flash = Math.max(0, b.flash - dt * 5);
+        if (b.glow) b.glow = Math.max(0, b.glow - dt * 0.9);
+      }
       for (const it of this.items) it.t += dt;
       if (this.banner > 0) this.banner -= dt;
       this.stateT += dt;
+      // combo heat cools between flights
+      const cooling = (this.state === 'flight' || this.state === 'winFly') ? 0.055 : 0.5;
+      this.heat = Math.max(0, this.heat - dt * cooling);
 
       if (this.overlay && this.overlay.update) this.overlay.update(dt);
       if (this.overlay) return;
@@ -532,6 +555,7 @@
       this.drawHUD(ctx);
       this.drawBoosterBar(ctx);
       BO.fx.drawCombos(ctx, W);
+      BO.fx.drawEdge(ctx, W, H);
 
       if (BO.fx.flash > 0) {
         ctx.fillStyle = 'rgba(255,255,255,' + BO.fx.flash + ')';
@@ -606,6 +630,19 @@
           ctx.globalAlpha = alpha * b.flash * 0.55;
           ctx.globalCompositeOperation = 'lighter';
           ctx.drawImage(tex, -s / 2, -s / 2, s, s);
+          ctx.globalCompositeOperation = 'source-over';
+        }
+        // lingering neon edge on recently-hit bricks
+        if (b.glow > 0 && b.shape === 'rect') {
+          const ga = Math.min(1, b.glow) * 0.9;
+          ctx.globalAlpha = alpha * ga;
+          ctx.shadowColor = '#6ee8ff';
+          ctx.shadowBlur = 14;
+          ctx.lineWidth = 3;
+          ctx.strokeStyle = '#8ef0ff';
+          BO.R.roundRect(ctx, -s / 2 + 1.5, -s / 2 + 1.5, s - 3, s - 3, 8);
+          ctx.stroke();
+          ctx.shadowBlur = 0;
         }
         ctx.restore();
       }
@@ -811,6 +848,47 @@
         ctx.fillText(md.name, W / 2 + tw / 2 + 10 + mw / 2, st + 27);
       }
       BO.R.outlineText(ctx, '' + this.score, W / 2, st + 60, 40, '#fff');
+      // combo heat: score ignites (competitor-style flaming number)
+      if (this.heat > 0.28) {
+        const hk = (this.heat - 0.28) / 0.72;   // 0..1
+        ctx.save();
+        // ember glow behind the number
+        ctx.globalCompositeOperation = 'lighter';
+        const gw = 90 + hk * 60;
+        const g = ctx.createRadialGradient(W / 2, st + 58, 6, W / 2, st + 58, gw);
+        g.addColorStop(0, 'rgba(255,120,30,' + (0.35 + hk * 0.3) + ')');
+        g.addColorStop(0.6, 'rgba(230,40,30,' + (0.18 + hk * 0.2) + ')');
+        g.addColorStop(1, 'rgba(230,40,30,0)');
+        ctx.fillStyle = g;
+        ctx.fillRect(W / 2 - gw, st + 58 - gw, gw * 2, gw * 2);
+        ctx.restore();
+        // re-draw score in fire colors, slight pulse
+        const pulse = 1 + 0.04 * hk * Math.sin(this.t * 10);
+        ctx.save();
+        ctx.translate(W / 2, st + 60);
+        ctx.scale(pulse, pulse);
+        const fg = ctx.createLinearGradient(0, -22, 0, 22);
+        fg.addColorStop(0, '#fff3b0');
+        fg.addColorStop(0.45, '#ffb428');
+        fg.addColorStop(1, '#f03818');
+        ctx.font = '900 40px ' + BO.FONT;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.lineJoin = 'round';
+        ctx.lineWidth = 6;
+        ctx.strokeStyle = 'rgba(90,10,5,0.8)';
+        ctx.strokeText('' + this.score, 0, 0);
+        ctx.fillStyle = fg;
+        ctx.fillText('' + this.score, 0, 0);
+        ctx.restore();
+        // rising embers
+        this.emberT -= 0.016;
+        if (this.emberT <= 0) {
+          this.emberT = 0.10 - hk * 0.05;
+          const tw = ctx.measureText('' + this.score).width;
+          BO.fx.sparks(W / 2 + BO.rand(-tw / 2, tw / 2), st + 44, hk > 0.5 ? '#ff5a28' : '#ffb428', 1, 90);
+        }
+      }
 
       // progress bar
       const bw = W * 0.36, bx = W / 2 - bw / 2, by = st + 92;

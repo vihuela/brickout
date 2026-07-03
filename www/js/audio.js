@@ -82,6 +82,9 @@
     lightning() {
       noise(0.28, 0.24, 1700, 0.6);
       tone(1600, 120, 0.26, 'sawtooth', 0.12);
+      // laser charge-release layer
+      tone(300, 2400, 0.12, 'sine', 0.10);
+      tone(2400, 500, 0.30, 'square', 0.05, 0.10);
     },
     hammer() {
       noise(0.22, 0.30, 400, 0.7);

@@ -5,12 +5,27 @@
   const parts = [];     // physical particles
   const floaters = [];  // rising texts
   const bolts = [];     // lightning polylines
+  const lasers = [];    // beam sweeps
+  const flares = [];    // starburst flashes
   const rings = [];     // shockwave rings
   const combos = [];    // big combo popups
   let shake = 0;
   let flash = 0;
+  let edge = 0;         // screen-edge glow intensity
 
   const MAX_PARTS = 700;
+
+  // 4-point star path
+  function star4(ctx, x, y, r, rot) {
+    ctx.beginPath();
+    for (let i = 0; i < 8; i++) {
+      const a = rot + i * Math.PI / 4;
+      const rr = i % 2 === 0 ? r : r * 0.30;
+      const px = x + Math.cos(a) * rr, py = y + Math.sin(a) * rr;
+      i ? ctx.lineTo(px, py) : ctx.moveTo(px, py);
+    }
+    ctx.closePath();
+  }
 
   function push(p) {
     if (parts.length >= MAX_PARTS) parts.shift();
@@ -20,13 +35,16 @@
   BO.fx = {
     reset() {
       parts.length = 0; floaters.length = 0; bolts.length = 0;
-      rings.length = 0; combos.length = 0; shake = 0; flash = 0;
+      lasers.length = 0; flares.length = 0;
+      rings.length = 0; combos.length = 0; shake = 0; flash = 0; edge = 0;
     },
     addShake(m) { shake = Math.min(BO.CFG.MAX_SHAKE, shake + m); },
     addFlash(a) { flash = Math.min(0.5, flash + a); },
+    addEdge(a) { edge = Math.min(1, edge + a); },
     get shakeX() { return shake > 0.2 ? BO.rand(-shake, shake) : 0; },
     get shakeY() { return shake > 0.2 ? BO.rand(-shake, shake) : 0; },
     get flash() { return flash; },
+    get edge() { return edge; },
 
     // brick shards
     shards(x, y, w, h, color, n) {
@@ -94,9 +112,26 @@
       bolts.push({ pts, t: 0, dur: 0.28, color: color || '#ffe37a' });
     },
 
+    // starburst flash at an impact point (competitor-style 4-point star + ring)
+    flare(x, y, size, color) {
+      flares.push({
+        x, y, t: 0, dur: 0.30,
+        size: size || 26,
+        rot: BO.rand(0, BO.TAU),
+        color: color || '#ffffff',
+        ringColor: '#ff5ad0',
+      });
+    },
+
+    // full-width laser beam sweep (horizontal: y fixed; or vertical)
+    laser(x0, y0, x1, y1, color) {
+      lasers.push({ x0, y0, x1, y1, t: 0, dur: 0.5, color: color || '#7af0ff' });
+    },
+
     update(dt) {
       shake = Math.max(0, shake - dt * 44);
       flash = Math.max(0, flash - dt * 2.2);
+      edge = Math.max(0, edge - dt * 1.1);
       for (let i = parts.length - 1; i >= 0; i--) {
         const p = parts[i];
         p.life -= p.decay * dt;
@@ -115,6 +150,14 @@
       for (let i = bolts.length - 1; i >= 0; i--) {
         bolts[i].t += dt;
         if (bolts[i].t >= bolts[i].dur) bolts.splice(i, 1);
+      }
+      for (let i = lasers.length - 1; i >= 0; i--) {
+        lasers[i].t += dt;
+        if (lasers[i].t >= lasers[i].dur) lasers.splice(i, 1);
+      }
+      for (let i = flares.length - 1; i >= 0; i--) {
+        flares[i].t += dt;
+        if (flares[i].t >= flares[i].dur) flares.splice(i, 1);
       }
       for (let i = rings.length - 1; i >= 0; i--) {
         rings[i].t += dt;
@@ -174,6 +217,54 @@
         ctx.stroke();
         ctx.restore();
       }
+      // lasers: hot core + gradient glow + endpoint flare
+      for (const L of lasers) {
+        const k = L.t / L.dur;
+        const grow = Math.min(1, k / 0.12);          // quick expand
+        const fade = k > 0.55 ? 1 - (k - 0.55) / 0.45 : 1;
+        const dx = L.x1 - L.x0, dy = L.y1 - L.y0;
+        const len = Math.hypot(dx, dy) || 1;
+        const ang = Math.atan2(dy, dx);
+        const thick = 46 * grow * fade;
+        ctx.save();
+        ctx.translate(L.x0, L.y0);
+        ctx.rotate(ang);
+        ctx.globalAlpha = fade;
+        ctx.globalCompositeOperation = 'lighter';
+        // outer glow
+        let g = ctx.createLinearGradient(0, -thick, 0, thick);
+        g.addColorStop(0, 'rgba(0,0,0,0)');
+        g.addColorStop(0.5, BO.R.rgba ? 'rgba(122,240,255,0.55)' : L.color);
+        g.addColorStop(1, 'rgba(0,0,0,0)');
+        ctx.fillStyle = g;
+        ctx.fillRect(0, -thick, len, thick * 2);
+        // hot core
+        g = ctx.createLinearGradient(0, -thick * 0.22, 0, thick * 0.22);
+        g.addColorStop(0, 'rgba(255,255,255,0)');
+        g.addColorStop(0.5, 'rgba(255,255,255,0.95)');
+        g.addColorStop(1, 'rgba(255,255,255,0)');
+        ctx.fillStyle = g;
+        ctx.fillRect(0, -thick * 0.22, len, thick * 0.44);
+        ctx.restore();
+        // endpoint flares
+        this.drawFlareShape(ctx, L.x1, L.y1, 34 * grow * fade, k * 5, fade);
+        this.drawFlareShape(ctx, L.x0, L.y0, 24 * grow * fade, -k * 4, fade * 0.8);
+      }
+      // starburst flares
+      for (const f of flares) {
+        const k = f.t / f.dur;
+        const scale = k < 0.3 ? k / 0.3 : 1 - (k - 0.3) / 0.7 * 0.55;
+        const alpha = 1 - k * k;
+        this.drawFlareShape(ctx, f.x, f.y, f.size * scale, f.rot + k * 2.5, alpha);
+        // pink ring
+        ctx.globalAlpha = alpha * 0.85;
+        ctx.beginPath();
+        ctx.arc(f.x, f.y, f.size * (0.5 + k * 1.1), 0, BO.TAU);
+        ctx.strokeStyle = f.ringColor;
+        ctx.lineWidth = 3.5 * (1 - k) + 1;
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+      }
       // floaters
       for (const f of floaters) {
         const k = f.t / f.dur;
@@ -181,6 +272,45 @@
         BO.R.outlineText(ctx, f.txt, f.x, f.y, f.size, f.color);
       }
       ctx.globalAlpha = 1;
+    },
+
+    // 4-point starburst (white core, additive)
+    drawFlareShape(ctx, x, y, r, rot, alpha) {
+      if (r < 1) return;
+      ctx.save();
+      ctx.globalAlpha = alpha;
+      ctx.globalCompositeOperation = 'lighter';
+      star4(ctx, x, y, r * 1.9, rot);
+      ctx.fillStyle = 'rgba(180,240,255,0.5)';
+      ctx.fill();
+      star4(ctx, x, y, r, rot);
+      ctx.fillStyle = '#ffffff';
+      ctx.fill();
+      ctx.restore();
+    },
+
+    // screen-edge glow vignette; call after world draw
+    drawEdge(ctx, W, H) {
+      if (edge <= 0.01) return;
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      const t = performance.now() / 1000;
+      const a = edge * (0.55 + 0.12 * Math.sin(t * 6));
+      const S = 90;
+      const sides = [
+        [0, 0, W, S, 0, 0, 0, S],           // top
+        [0, H - S, W, S, 0, H, 0, H - S],   // bottom
+        [0, 0, S, H, 0, 0, S, 0],           // left
+        [W - S, 0, S, H, W, 0, W - S, 0],   // right
+      ];
+      for (const [rx, ry, rw, rh, gx0, gy0, gx1, gy1] of sides) {
+        const g = ctx.createLinearGradient(gx0, gy0, gx1, gy1);
+        g.addColorStop(0, 'rgba(70,150,255,' + a.toFixed(3) + ')');
+        g.addColorStop(1, 'rgba(70,150,255,0)');
+        ctx.fillStyle = g;
+        ctx.fillRect(rx, ry, rw, rh);
+      }
+      ctx.restore();
     },
 
     // big combo popup, draw above everything in play area
