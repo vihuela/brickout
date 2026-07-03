@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>html,body{margin:0;padding:0;background:transparent}canvas{display:block}</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<script src="../www/js/config.js"></script>
+<script src="../www/js/store.js"></script>
+<script src="../www/js/audio.js"></script>
+<script src="../www/js/render.js"></script>
+<script>
+(function () {
+  const qs = new URLSearchParams(location.search);
+  const mode = qs.get('mode') || 'icon';
+  const cv = document.getElementById('c');
+  const S = mode.startsWith('splash') ? 2732 : 1024;
+  cv.width = S; cv.height = S;
+  const ctx = cv.getContext('2d');
+  const R = BO.R;
+
+  function bg() {
+    const g = ctx.createLinearGradient(0, 0, 0, S);
+    g.addColorStop(0, '#232848');
+    g.addColorStop(0.55, '#1b2036');
+    g.addColorStop(1, '#141827');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, S, S);
+    const rg = ctx.createRadialGradient(S / 2, S * 0.42, S * 0.05, S / 2, S * 0.42, S * 0.7);
+    rg.addColorStop(0, 'rgba(90,110,220,0.18)');
+    rg.addColorStop(1, 'rgba(90,110,220,0)');
+    ctx.fillStyle = rg;
+    ctx.fillRect(0, 0, S, S);
+  }
+
+  // brick motif: 2 rows of bricks + ball smashing through
+  function motif(cx, cy, u) {
+    // u = brick cell size
+    const defs = [
+      [-1.55, -1.05, '#2f7be8'], [-0.5, -1.05, '#ea3e9b'], [0.55, -1.05, '#f58b1f'],
+      [-1.05, 0.0, '#63c72f'], [0.02, 0.0, '#9450e8'],
+    ];
+    for (const [dx, dy, col] of defs) {
+      const w = u, h = u * 0.62;
+      const tex = R.brickTex(col, 220, 136, 'rect');
+      ctx.drawImage(tex, cx + dx * u, cy + dy * h * 1.62, w, h);
+    }
+    // ball below with motion streak
+    const bx = cx + u * 0.75, by = cy + u * 1.15;
+    ctx.save();
+    ctx.strokeStyle = 'rgba(90,208,46,0.5)';
+    ctx.lineCap = 'round';
+    ctx.lineWidth = u * 0.30;
+    ctx.beginPath();
+    ctx.moveTo(bx - u * 1.5, by + u * 0.9);
+    ctx.lineTo(bx, by);
+    ctx.stroke();
+    ctx.restore();
+    R.drawBall(ctx, bx, by, u * 0.30, BO.SKINS[0], 0);
+  }
+
+  if (mode === 'iconbg') {
+    bg();
+  } else if (mode === 'iconfg') {
+    // transparent, content within center 66% safe zone
+    motif(S / 2, S / 2 - S * 0.02, S * 0.19);
+  } else if (mode === 'icon') {
+    bg();
+    motif(S / 2, S / 2 - S * 0.02, S * 0.24);
+  } else if (mode === 'splash') {
+    bg();
+    const logo = R.logo(1500);
+    ctx.drawImage(logo, S / 2 - 750, S / 2 - 225, 1500, 450);
+    ctx.font = '700 54px ' + BO.FONT;
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#aeb6d8';
+    ctx.fillText('SHOOT BALLS & BREAK BRICKS', S / 2, S / 2 + 300);
+  }
+  window.__done = true;
+})();
+</script>
+</body>
+</html>

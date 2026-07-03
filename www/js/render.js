@@ -1,0 +1,409 @@
+// ============================================================
+// Brick Out - rendering helpers (textures, widgets, logo)
+// ============================================================
+(function () {
+  const R = {};
+  BO.R = R;
+
+  R.roundRect = function (ctx, x, y, w, h, r) {
+    r = Math.min(r, w / 2, h / 2);
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r);
+    ctx.closePath();
+  };
+
+  // ---------- color utils ----------
+  function hexToRgb(h) {
+    const n = parseInt(h.slice(1), 16);
+    return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+  }
+  R.shade = function (hex, f) { // f: -1..1
+    const [r, g, b] = hexToRgb(hex);
+    const t = f < 0 ? 0 : 255;
+    const p = Math.abs(f);
+    const c = v => Math.round(BO.lerp(v, t, p));
+    return `rgb(${c(r)},${c(g)},${c(b)})`;
+  };
+  R.rgba = function (hex, a) {
+    const [r, g, b] = hexToRgb(hex);
+    return `rgba(${r},${g},${b},${a})`;
+  };
+
+  // ---------- brick texture (cached) ----------
+  // shape: 'rect' | 'bl' | 'br' | 'tl' | 'tr'  (triangle solid corner)
+  const texCache = {};
+  R.brickTex = function (color, w, h, shape) {
+    const key = color + '_' + (w | 0) + '_' + (h | 0) + '_' + shape;
+    let cv = texCache[key];
+    if (cv) return cv;
+    const S = 2; // supersample
+    cv = document.createElement('canvas');
+    cv.width = Math.max(2, (w * S) | 0);
+    cv.height = Math.max(2, (h * S) | 0);
+    const c = cv.getContext('2d');
+    c.scale(S, S);
+    const r = Math.min(9, w * 0.12);
+
+    // clip path
+    c.beginPath();
+    if (shape === 'rect') {
+      R.roundRect(c, 0, 0, w, h, r);
+    } else {
+      // right triangle: name = solid right-angle corner
+      if (shape === 'bl') { c.moveTo(1, 1); c.lineTo(1, h - 1); c.lineTo(w - 1, h - 1); }
+      if (shape === 'br') { c.moveTo(w - 1, 1); c.lineTo(w - 1, h - 1); c.lineTo(1, h - 1); }
+      if (shape === 'tl') { c.moveTo(1, 1); c.lineTo(w - 1, 1); c.lineTo(1, h - 1); }
+      if (shape === 'tr') { c.moveTo(1, 1); c.lineTo(w - 1, 1); c.lineTo(w - 1, h - 1); }
+      c.closePath();
+    }
+    c.save();
+    c.clip();
+
+    // base gradient
+    const g = c.createLinearGradient(0, 0, 0, h);
+    g.addColorStop(0, R.shade(color, 0.16));
+    g.addColorStop(0.45, color);
+    g.addColorStop(1, R.shade(color, -0.14));
+    c.fillStyle = g;
+    c.fillRect(0, 0, w, h);
+
+    // mortar lines (brick bond pattern)
+    c.strokeStyle = 'rgba(10,10,30,0.20)';
+    c.lineWidth = 2.4;
+    const rows = 3;
+    const rh = h / rows;
+    for (let i = 1; i < rows; i++) {
+      c.beginPath(); c.moveTo(0, i * rh); c.lineTo(w, i * rh); c.stroke();
+    }
+    for (let i = 0; i < rows; i++) {
+      const off = (i % 2) ? w * 0.28 : 0;
+      for (let x = off + w * 0.36; x < w; x += w * 0.44) {
+        c.beginPath(); c.moveTo(x, i * rh); c.lineTo(x, (i + 1) * rh); c.stroke();
+      }
+    }
+    // bevel: top highlight, bottom shadow
+    c.fillStyle = 'rgba(255,255,255,0.22)';
+    c.fillRect(0, 0, w, 4.5);
+    c.fillStyle = 'rgba(0,0,20,0.25)';
+    c.fillRect(0, h - 5.5, w, 5.5);
+    c.restore();
+
+    // outline
+    c.lineWidth = 3;
+    c.strokeStyle = 'rgba(8,10,24,0.5)';
+    c.stroke();
+
+    texCache[key] = cv;
+    return cv;
+  };
+
+  // outlined bold number/text
+  R.outlineText = function (ctx, txt, x, y, size, fill, stroke, weightFont) {
+    ctx.font = (weightFont || '900 ') + size + 'px ' + BO.FONT;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.lineJoin = 'round';
+    ctx.lineWidth = Math.max(3, size / 6.5);
+    ctx.strokeStyle = stroke || BO.PAL.numStroke;
+    ctx.strokeText(txt, x, y);
+    ctx.fillStyle = fill || '#fff';
+    ctx.fillText(txt, x, y);
+  };
+
+  R.fmtHp = function (hp) {
+    if (hp >= 10000) return (hp / 1000).toFixed(0) + 'k';
+    if (hp >= 1000) return (hp / 1000).toFixed(1).replace('.0', '') + 'k';
+    return '' + hp;
+  };
+
+  // ---------- items ----------
+  R.drawGem = function (ctx, x, y, r, rot) {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(rot || 0);
+    ctx.beginPath();
+    for (let i = 0; i < 6; i++) {
+      const a = i / 6 * BO.TAU + Math.PI / 6;
+      const px = Math.cos(a) * r, py = Math.sin(a) * r;
+      i ? ctx.lineTo(px, py) : ctx.moveTo(px, py);
+    }
+    ctx.closePath();
+    const g = ctx.createLinearGradient(-r, -r, r, r);
+    g.addColorStop(0, '#ffe063');
+    g.addColorStop(0.5, '#ffb31e');
+    g.addColorStop(1, '#f08c0a');
+    ctx.fillStyle = g;
+    ctx.fill();
+    ctx.lineWidth = r * 0.16;
+    ctx.strokeStyle = 'rgba(120,60,0,0.55)';
+    ctx.stroke();
+    // facets
+    ctx.beginPath();
+    for (let i = 0; i < 6; i++) {
+      const a = i / 6 * BO.TAU + Math.PI / 6;
+      ctx.moveTo(Math.cos(a) * r * 0.92, Math.sin(a) * r * 0.92);
+      ctx.lineTo(Math.cos(a) * r * 0.30, Math.sin(a) * r * 0.30);
+    }
+    ctx.strokeStyle = 'rgba(255,255,255,0.35)';
+    ctx.lineWidth = r * 0.09;
+    ctx.stroke();
+    // shine
+    ctx.beginPath();
+    ctx.arc(-r * 0.3, -r * 0.35, r * 0.16, 0, BO.TAU);
+    ctx.fillStyle = 'rgba(255,255,255,0.85)';
+    ctx.fill();
+    ctx.restore();
+  };
+
+  R.boltPath = function (ctx, x, y, s) {
+    ctx.beginPath();
+    ctx.moveTo(x + 0.12 * s, y - 0.5 * s);
+    ctx.lineTo(x - 0.22 * s, y + 0.08 * s);
+    ctx.lineTo(x - 0.02 * s, y + 0.08 * s);
+    ctx.lineTo(x - 0.12 * s, y + 0.5 * s);
+    ctx.lineTo(x + 0.24 * s, y - 0.06 * s);
+    ctx.lineTo(x + 0.04 * s, y - 0.06 * s);
+    ctx.closePath();
+  };
+
+  R.drawCoin = function (ctx, x, y, r, t) {
+    const squish = 0.75 + 0.25 * Math.abs(Math.sin((t || 0) * 2.2));
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.scale(squish, 1);
+    const g = ctx.createRadialGradient(-r * 0.3, -r * 0.3, r * 0.2, 0, 0, r);
+    g.addColorStop(0, '#ffdf6e');
+    g.addColorStop(1, '#e09a10');
+    ctx.beginPath(); ctx.arc(0, 0, r, 0, BO.TAU);
+    ctx.fillStyle = g; ctx.fill();
+    ctx.lineWidth = r * 0.14;
+    ctx.strokeStyle = '#a86e08'; ctx.stroke();
+    ctx.beginPath(); ctx.arc(0, 0, r * 0.74, 0, BO.TAU);
+    ctx.strokeStyle = 'rgba(140,90,0,0.5)'; ctx.lineWidth = r * 0.09; ctx.stroke();
+    R.boltPath(ctx, 0, 0, r * 1.1);
+    ctx.fillStyle = '#a86e08';
+    ctx.fill();
+    ctx.restore();
+  };
+
+  R.drawPlusBall = function (ctx, x, y, r, t) {
+    const p = 1 + 0.08 * Math.sin((t || 0) * 4);
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.scale(p, p);
+    ctx.beginPath(); ctx.arc(0, 0, r, 0, BO.TAU);
+    ctx.fillStyle = '#2f9e1e'; ctx.fill();
+    ctx.beginPath(); ctx.arc(0, 0, r * 0.78, 0, BO.TAU);
+    const g = ctx.createRadialGradient(-r * 0.25, -r * 0.25, r * 0.1, 0, 0, r * 0.78);
+    g.addColorStop(0, '#8ce85c');
+    g.addColorStop(1, '#3fbe22');
+    ctx.fillStyle = g; ctx.fill();
+    R.outlineText(ctx, '1', 0, 1, r * 1.15, '#fff', 'rgba(20,60,10,0.6)');
+    ctx.restore();
+  };
+
+  // ---------- ball ----------
+  R.rainbowAt = function (t) {
+    return 'hsl(' + (((t * 90) % 360 + 360) % 360) + ',90%,60%)';
+  };
+  R.drawBall = function (ctx, x, y, r, skin, t) {
+    const col = skin.color === 'rainbow' ? R.rainbowAt(t || 0) : skin.color;
+    const hi = skin.hi;
+    const g = ctx.createRadialGradient(x - r * 0.35, y - r * 0.4, r * 0.15, x, y, r);
+    g.addColorStop(0, hi);
+    g.addColorStop(0.55, col);
+    g.addColorStop(1, skin.color === 'rainbow' ? col : R.shade(col, -0.28));
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, BO.TAU);
+    ctx.fillStyle = g;
+    ctx.fill();
+  };
+
+  // ---------- 3D buttons ----------
+  // opts: {color, edge, text, size, icon(fn), disabled, pressed, radius}
+  R.button3D = function (ctx, x, y, w, h, opts) {
+    const rad = opts.radius != null ? opts.radius : 14;
+    const depth = opts.depth != null ? opts.depth : 8;
+    const press = opts.pressed ? depth * 0.7 : 0;
+    const col = opts.disabled ? '#5a6070' : opts.color;
+    ctx.save();
+    // dark outer stroke
+    R.roundRect(ctx, x - 2.5, y - 2.5 + press, w + 5, h + 5 + depth - press, rad + 3);
+    ctx.fillStyle = 'rgba(8,10,22,0.7)';
+    ctx.fill();
+    // bottom edge
+    R.roundRect(ctx, x, y + press, w, h + depth - press, rad);
+    ctx.fillStyle = opts.edge || R.shade(col, -0.42);
+    ctx.fill();
+    // face
+    R.roundRect(ctx, x, y + press, w, h, rad);
+    const g = ctx.createLinearGradient(0, y, 0, y + h);
+    g.addColorStop(0, R.shade(col, 0.22));
+    g.addColorStop(0.5, col);
+    g.addColorStop(1, R.shade(col, -0.1));
+    ctx.fillStyle = g;
+    ctx.fill();
+    // top inner highlight
+    ctx.save();
+    R.roundRect(ctx, x, y + press, w, h, rad);
+    ctx.clip();
+    ctx.fillStyle = 'rgba(255,255,255,0.28)';
+    ctx.fillRect(x, y + press, w, 5);
+    ctx.restore();
+    if (opts.text) {
+      R.outlineText(ctx, opts.text, x + w / 2, y + press + h / 2 + 1,
+        opts.size || h * 0.42, '#fff', 'rgba(10,30,10,0.45)');
+    }
+    if (opts.icon) opts.icon(ctx, x + w / 2, y + press + h / 2, Math.min(w, h));
+    ctx.restore();
+    return { x: x - 4, y: y - 4, w: w + 8, h: h + depth + 8 };
+  };
+
+  // small square bevel button (HUD)
+  R.iconButton = function (ctx, x, y, s, iconFn, opts) {
+    opts = opts || {};
+    ctx.save();
+    R.roundRect(ctx, x, y, s, s, 10);
+    ctx.fillStyle = 'rgba(8,10,22,0.75)';
+    ctx.fill();
+    R.roundRect(ctx, x + 2, y + 2, s - 4, s - 4, 8);
+    const g = ctx.createLinearGradient(0, y, 0, y + s);
+    g.addColorStop(0, opts.bright ? '#59617e' : '#3c4358');
+    g.addColorStop(1, opts.bright ? '#3a4059' : '#272c3d');
+    ctx.fillStyle = g;
+    ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,0.15)';
+    ctx.fillRect(x + 4, y + 3, s - 8, 3);
+    iconFn(ctx, x + s / 2, y + s / 2, s);
+    ctx.restore();
+    return { x: x - 6, y: y - 6, w: s + 12, h: s + 12 };
+  };
+
+  // ---------- stars ----------
+  R.starPath = function (ctx, x, y, r) {
+    ctx.beginPath();
+    for (let i = 0; i < 10; i++) {
+      const a = -Math.PI / 2 + i * Math.PI / 5;
+      const rr = i % 2 === 0 ? r : r * 0.46;
+      const px = x + Math.cos(a) * rr, py = y + Math.sin(a) * rr;
+      i ? ctx.lineTo(px, py) : ctx.moveTo(px, py);
+    }
+    ctx.closePath();
+  };
+  R.drawStar = function (ctx, x, y, r, lit) {
+    R.starPath(ctx, x, y, r);
+    if (lit) {
+      const g = ctx.createLinearGradient(x, y - r, x, y + r);
+      g.addColorStop(0, '#ffe063');
+      g.addColorStop(1, '#f5a614');
+      ctx.fillStyle = g;
+    } else {
+      ctx.fillStyle = '#242a40';
+    }
+    ctx.fill();
+    ctx.lineWidth = r * 0.18;
+    ctx.strokeStyle = lit ? 'rgba(150,90,0,0.6)' : 'rgba(8,10,24,0.8)';
+    ctx.stroke();
+    if (lit) {
+      ctx.beginPath();
+      ctx.arc(x - r * 0.25, y - r * 0.3, r * 0.14, 0, BO.TAU);
+      ctx.fillStyle = 'rgba(255,255,255,0.8)';
+      ctx.fill();
+    }
+  };
+
+  // ---------- BRICKOUT logo (cached offscreen) ----------
+  let logoCv = null;
+  R.logo = function (targetW) {
+    if (logoCv && logoCv._w === targetW) return logoCv;
+    const word = 'BRICKOUT';
+    const S = 2;
+    const w = targetW * S;
+    const h = targetW * 0.30 * S;
+    logoCv = document.createElement('canvas');
+    logoCv.width = w; logoCv.height = h;
+    logoCv._w = targetW;
+    const c = logoCv.getContext('2d');
+
+    let fs = h * 0.52;
+    c.font = '900 ' + fs + 'px ' + BO.FONT;
+    // fit width
+    let tw = c.measureText(word).width;
+    fs *= (w * 0.94) / tw;
+    c.font = '900 ' + fs + 'px ' + BO.FONT;
+    tw = c.measureText(word).width;
+
+    const baseY = h * 0.52;
+    const depth = fs * 0.10;
+    const colors = BO.PAL.logo;
+
+    // per-letter positions
+    let x = (w - tw) / 2;
+    const letters = [];
+    for (let i = 0; i < word.length; i++) {
+      const ch = word[i];
+      const lw = c.measureText(ch).width;
+      letters.push({ ch, x: x + lw / 2, col: colors[i % colors.length], lw });
+      x += lw;
+    }
+    c.textAlign = 'center';
+    c.textBaseline = 'middle';
+    c.lineJoin = 'round';
+
+    // pass 1: outline + extrusion silhouette
+    c.lineWidth = fs * 0.14;
+    c.strokeStyle = '#12141f';
+    for (const L of letters) {
+      for (let d = depth; d >= 0; d -= 2) c.strokeText(L.ch, L.x, baseY + d);
+    }
+    // pass 2: extrusion in dark letter color
+    for (const L of letters) {
+      c.fillStyle = R.shade(L.col, -0.5);
+      for (let d = depth; d > 0; d -= 1.5) c.fillText(L.ch, L.x, baseY + d);
+    }
+    // pass 3: face with vertical gradient per letter
+    for (const L of letters) {
+      const g = c.createLinearGradient(0, baseY - fs / 2, 0, baseY + fs / 2);
+      g.addColorStop(0, R.shade(L.col, 0.25));
+      g.addColorStop(1, R.shade(L.col, -0.08));
+      c.fillStyle = g;
+      c.fillText(L.ch, L.x, baseY);
+    }
+    // pass 4: mortar lines clipped to face via source-atop on temp canvas
+    const face = document.createElement('canvas');
+    face.width = w; face.height = h;
+    const fc = face.getContext('2d');
+    fc.font = c.font; fc.textAlign = 'center'; fc.textBaseline = 'middle';
+    for (const L of letters) { fc.fillStyle = '#fff'; fc.fillText(L.ch, L.x, baseY); }
+    fc.globalCompositeOperation = 'source-in';
+    fc.fillStyle = 'rgba(0,0,0,0)';
+    // draw mortar pattern onto separate canvas then mask
+    const pat = document.createElement('canvas');
+    pat.width = w; pat.height = h;
+    const pc = pat.getContext('2d');
+    pc.strokeStyle = 'rgba(20,15,40,0.30)';
+    pc.lineWidth = fs * 0.035;
+    const bh = fs * 0.22;
+    for (let yy = baseY - fs * 0.5; yy < baseY + fs * 0.55; yy += bh) {
+      pc.beginPath(); pc.moveTo(0, yy); pc.lineTo(w, yy); pc.stroke();
+    }
+    let rowI = 0;
+    for (let yy = baseY - fs * 0.5; yy < baseY + fs * 0.55; yy += bh, rowI++) {
+      const off = (rowI % 2) * bh * 1.1;
+      for (let xx = off; xx < w; xx += bh * 2.2) {
+        pc.beginPath(); pc.moveTo(xx, yy); pc.lineTo(xx, yy + bh); pc.stroke();
+      }
+    }
+    // top shine band
+    pc.fillStyle = 'rgba(255,255,255,0.18)';
+    pc.fillRect(0, baseY - fs * 0.42, w, fs * 0.12);
+    fc.globalCompositeOperation = 'source-in';
+    fc.drawImage(pat, 0, 0);
+    c.drawImage(face, 0, 0);
+    return logoCv;
+  };
+})();

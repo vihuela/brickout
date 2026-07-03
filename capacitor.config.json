@@ -1,0 +1,9 @@
+{
+  "appId": "com.h5.brickout",
+  "appName": "Brick Out",
+  "webDir": "www",
+  "backgroundColor": "#141827",
+  "android": {
+    "allowMixedContent": false
+  }
+}
