@@ -33,6 +33,9 @@
     this.hammerRow = -1;
 
     this.aim = null;               // {dx,dy} unit
+    this.aimDeg = 90;              // last aim angle (slider knob position)
+    this.aimMode = null;           // 'swipe' | 'slider'
+    this.sliderAim = false;
     this.settleT = 0;
     this.stateT = 0;
     this.overlay = null;
@@ -86,6 +89,7 @@
       this.state = 'flight';
       this.stateT = 0;
       this.flightT = 0;
+      this.aimDeg = Math.atan2(-dir.dy, dir.dx) * 180 / Math.PI;
       this.turns++;
       if (this.mode === 'limit') this.movesLeft--;
       this.toFire = this.totalShots();
@@ -683,12 +687,16 @@
       const R = CFG.BALL_R;
       const sp = this.ballSpeed();
       const g = this.gravityAcc();
+      const gold = this.aimVia === 'slider';
       let x = this.launcherX, y = this.launchY - R;
       let vx = this.aim.dx * sp, vy = this.aim.dy * sp;
       ctx.save();
       let dist = 0, bounces = 0, dotGap = 0, t = 0;
-      const maxDist = CFG.GUIDE_LEN;
-      while (dist < maxDist && t < 1.25 && bounces <= 1) {
+      const maxDist = gold ? CFG.GUIDE_LEN * 1.5 : CFG.GUIDE_LEN;
+      const maxBounce = gold ? 2 : 1;
+      const pts = [[x, y]];
+      const corners = [];                     // bounce points get sparkles
+      while (dist < maxDist && t < 1.6 && bounces <= maxBounce) {
         const v = Math.hypot(vx, vy) || 1;
         const h = 7 / v;
         if (g) vy += g * h;
@@ -701,14 +709,14 @@
         if (x < R) { x = R; vx = Math.abs(vx); reflected = true; }
         if (x > this.W - R) { x = this.W - R; vx = -Math.abs(vx); reflected = true; }
         if (y < this.boardTop + R) { y = this.boardTop + R; vy = Math.abs(vy); reflected = true; }
-        if (reflected) bounces++;
+        if (reflected) { bounces++; pts.push([x, y]); corners.push([x, y]); }
         // floor ends the preview (gravity arcs come back down)
         if (vy > 0 && y > this.launchY - R) break;
         // brick hit stops the guide
         const c = Math.floor(x / this.cell);
         const r = Math.floor((y - this.boardTop) / this.cell);
         if (this.grid[r + ',' + c]) break;
-        if (dotGap >= 26) {
+        if (!gold && dotGap >= 26) {
           dotGap = 0;
           const a = BO.clamp(1 - dist / maxDist, 0.15, 1) * (bounces ? 0.45 : 0.95);
           ctx.globalAlpha = a;
@@ -716,6 +724,30 @@
           ctx.arc(x, y, 6, 0, BO.TAU);
           ctx.fillStyle = '#fff';
           ctx.fill();
+        }
+        if (gold && g) {
+          // gravity: polyline needs every point, straight modes only corners
+          if (dotGap >= 14) { dotGap = 0; pts.push([x, y]); }
+        }
+      }
+      pts.push([x, y]);
+      if (gold) {
+        // competitor-style golden ray with glow + endpoint sparkles
+        ctx.lineJoin = 'round';
+        ctx.lineCap = 'round';
+        ctx.globalCompositeOperation = 'lighter';
+        ctx.strokeStyle = 'rgba(255,190,60,0.35)';
+        ctx.lineWidth = 9;
+        ctx.beginPath();
+        pts.forEach((p, i) => i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1]));
+        ctx.stroke();
+        ctx.strokeStyle = 'rgba(255,235,170,0.95)';
+        ctx.lineWidth = 2.5;
+        ctx.stroke();
+        // endpoint + bounce sparkles (corners only, not every arc sample)
+        BO.fx.drawFlareShape(ctx, pts[pts.length - 1][0], pts[pts.length - 1][1], 15, this.t * 2, 0.9);
+        for (let i = 0; i < corners.length; i++) {
+          BO.fx.drawFlareShape(ctx, corners[i][0], corners[i][1], 10, this.t * 2 + i, 0.9);
         }
       }
       ctx.restore();
@@ -931,8 +963,50 @@
       const W = this.W, top = this.boostTop;
       const inFlight = this.state === 'flight' || this.state === 'winFly';
       const bs = 88;
-      const y = top + (CFG.BOOST_H - bs) / 2 - 6;
+      const rowY = top + 74;                       // booster row (below slider row)
+      const y = rowY + (CFG.BOOST_H - 74 - bs) / 2 - 8;
       this.btnBolt = this.btnHammer = this.btnSplit = this.btnSpeed = this.btnRecall = null;
+      this.sliderR = null; this.btnFire = null;
+
+      // ---- aim slider row (ready/aiming only) ----
+      if (!inFlight && (this.state === 'ready' || this.state === 'aiming')) {
+        const sw = W * 0.60, sx = W * 0.09, sy = top + 38;
+        // track
+        BO.R.roundRect(ctx, sx, sy - 5, sw, 10, 5);
+        ctx.fillStyle = 'rgba(8,10,22,0.8)';
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(255,255,255,0.10)';
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+        // center notch (90°)
+        ctx.fillStyle = 'rgba(255,255,255,0.25)';
+        ctx.fillRect(sx + sw / 2 - 1.5, sy - 10, 3, 20);
+        // knob position from angle: left=170°..right=10°
+        const minD = CFG.MIN_AIM_DEG + 3, maxD = 180 - CFG.MIN_AIM_DEG - 3;
+        const k = 1 - (BO.clamp(this.aimDeg, minD, maxD) - minD) / (maxD - minD);
+        const kx = sx + k * sw;
+        // knob
+        const knobR = this.aimMode === 'slider' ? 24 : 20;
+        ctx.beginPath(); ctx.arc(kx, sy, knobR, 0, BO.TAU);
+        const kg = ctx.createLinearGradient(kx, sy - knobR, kx, sy + knobR);
+        kg.addColorStop(0, '#ffffff');
+        kg.addColorStop(1, '#c9d2e8');
+        ctx.fillStyle = kg;
+        ctx.fill();
+        ctx.lineWidth = 3;
+        ctx.strokeStyle = 'rgba(8,10,22,0.5)';
+        ctx.stroke();
+        BO.R.drawBall(ctx, kx, sy, 9, BO.store.skinDef(), this.t);
+        this.sliderR = { x: sx - 30, y: sy - 34, w: sw + 60, h: 68, sx, sw, sy };
+
+        // FIRE button (right of slider)
+        const fw = W * 0.22;
+        this.btnFire = BO.R.button3D(ctx, W - fw - 22, sy - 30, fw, 60, {
+          color: this.aim ? '#2fbb2f' : '#4a5170',
+          text: 'FIRE', size: 26, depth: 6, radius: 14,
+          disabled: !this.aim,
+        });
+      }
 
       if (!inFlight) {
         const can = BO.store.gems >= CFG.BOOSTER_COST;
@@ -1119,16 +1193,32 @@
       if (type === 'down') {
         if (BO.inRect(x, y, this.btnPause)) { this.pendPause = true; return; }
         this.pendPause = false;
-        if (this.state === 'ready' && y < this.boostTop && y > this.hudBottom) {
+        if ((this.state === 'ready' || this.state === 'aiming')
+            && this.sliderR && BO.inRect(x, y, this.sliderR)) {
+          this.aimMode = 'slider';
+          this.sliderAngle(x);
+          return;
+        }
+        if ((this.state === 'ready' || this.state === 'aiming') && this.btnFire
+            && BO.inRect(x, y, this.btnFire)) {
+          this.pendFire = true;
+          return;
+        }
+        if ((this.state === 'ready' || this.state === 'aiming')
+            && y < this.boostTop && y > this.hudBottom) {
+          this.aimMode = 'swipe';
           this.aimStart = { x, y };
           this.updateAim(x, y);
           if (this.aim) this.state = 'aiming';
           else this.aimPending = true;
         }
       } else if (type === 'move') {
-        if (this.state === 'aiming' || this.aimPending) {
+        if (this.aimMode === 'slider') {
+          this.sliderAngle(x);
+          return;
+        }
+        if (this.aimMode === 'swipe' && (this.state === 'aiming' || this.aimPending)) {
           this.updateAim(x, y);
-          if (this.aim && this.state === 'ready') this.state = 'aiming';
           if (this.aim) { this.state = 'aiming'; this.aimPending = false; }
         }
       } else if (type === 'up') {
@@ -1138,10 +1228,29 @@
           this.overlay = this.makePause();
           if (this.state === 'aiming') this.state = 'ready';
           this.aim = null;
+          this.aimMode = null;
           return;
         }
         if (BO.inRect(x, y, this.btnHelp)) { BO.audio.click(); this.overlay = BO.makeHelp(); return; }
         if (BO.inRect(x, y, this.btnSkins)) { BO.audio.click(); this.overlay = BO.makeShop(); return; }
+
+        // FIRE button release
+        if (this.pendFire) {
+          this.pendFire = false;
+          if (this.btnFire && BO.inRect(x, y, this.btnFire) && this.aim
+              && (this.state === 'ready' || this.state === 'aiming')) {
+            const dir = this.aim;
+            this.aim = null;
+            this.aimMode = null;
+            this.fire(dir);
+          }
+          return;
+        }
+        // slider release: keep aim locked, stay in aiming state
+        if (this.aimMode === 'slider') {
+          this.aimMode = null;
+          return;
+        }
 
         if (this.state === 'flight' || this.state === 'winFly') {
           if (BO.inRect(x, y, this.btnSpeed)) {
@@ -1163,14 +1272,35 @@
             this.boosterArm = null;
           }
         }
-        if (this.state === 'aiming') {
-          if (this.aim) this.fire(this.aim);
-          else this.state = 'ready';
-          this.aim = null;
-          this.aimPending = false;
+        if (this.state === 'aiming' && this.aimMode === 'swipe') {
+          if (this.aim) {
+            const dir = this.aim;
+            this.aim = null;
+            this.aimMode = null;
+            this.aimPending = false;
+            this.fire(dir);
+          } else {
+            this.state = 'ready';
+            this.aim = null;
+            this.aimMode = null;
+            this.aimPending = false;
+          }
         }
         this.aimPending = false;
       }
+    },
+
+    // slider x position -> aim angle (fine control)
+    sliderAngle(x) {
+      const s = this.sliderR;
+      if (!s) return;
+      const minD = CFG.MIN_AIM_DEG + 3, maxD = 180 - CFG.MIN_AIM_DEG - 3;
+      const k = BO.clamp((x - s.sx) / s.sw, 0, 1);
+      this.aimDeg = minD + (1 - k) * (maxD - minD);
+      const rad = this.aimDeg * Math.PI / 180;
+      this.aim = { dx: Math.cos(rad), dy: -Math.sin(rad) };
+      this.aimVia = 'slider';
+      if (this.state === 'ready') this.state = 'aiming';
     },
 
     updateAim(x, y) {
@@ -1183,6 +1313,8 @@
         return;
       }
       this.aim = { dx: dx / len, dy: dy / len };
+      this.aimDeg = Math.atan2(-dy, dx) * 180 / Math.PI;  // sync slider knob
+      this.aimVia = 'swipe';
     },
   };
 
