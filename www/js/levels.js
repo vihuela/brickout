@@ -224,7 +224,14 @@
 
   function procedural(n) {
     const rnd = mulberry32(n * 7349 + 13);
-    const R = Math.min(6 + ((n / 4) | 0), 12);
+    // cap rows so the board never spawns past the danger line:
+    // board height = viewH - hud - boosters - launch margin, minus 2 rows
+    // of headroom (first descent + breathing room)
+    const cell = BO.CFG.W / BO.CFG.COLS;
+    const boardH = (BO.viewH || 1600) - (BO.safeTop || 14) - BO.CFG.HUD_H
+      - (BO.safeBottom || 8) - BO.CFG.BOOST_H - 24;
+    const maxRows = Math.max(5, Math.floor(boardH / cell) - 3);
+    const R = Math.min(6 + ((n / 4) | 0), maxRows);
     const rows = [];
     const half = 4; // 0..3 mirrored
     for (let r = 0; r < R; r++) {

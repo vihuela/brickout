@@ -31,6 +31,7 @@
     const scale = canvas.width / BO.CFG.W;
     W = BO.CFG.W;
     H = canvas.height / scale;
+    BO.viewH = H;             // logical height, used by level gen to fit rows
     ctx.setTransform(scale, 0, 0, scale, 0, 0);
     readSafeArea();
   }
