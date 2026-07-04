@@ -190,6 +190,73 @@
     ctx.restore();
   };
 
+  // chain-lightning coin: purple coin with forked bolt
+  R.drawChainCoin = function (ctx, x, y, r, t) {
+    const squish = 0.75 + 0.25 * Math.abs(Math.sin((t || 0) * 2.2 + 1));
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.scale(squish, 1);
+    const g = ctx.createRadialGradient(-r * 0.3, -r * 0.3, r * 0.2, 0, 0, r);
+    g.addColorStop(0, '#d8a8ff');
+    g.addColorStop(1, '#8a3ce8');
+    ctx.beginPath(); ctx.arc(0, 0, r, 0, BO.TAU);
+    ctx.fillStyle = g; ctx.fill();
+    ctx.lineWidth = r * 0.14;
+    ctx.strokeStyle = '#5a1ca8'; ctx.stroke();
+    ctx.beginPath(); ctx.arc(0, 0, r * 0.74, 0, BO.TAU);
+    ctx.strokeStyle = 'rgba(70,20,140,0.5)'; ctx.lineWidth = r * 0.09; ctx.stroke();
+    // forked bolt: main + branch
+    R.boltPath(ctx, -r * 0.12, 0, r * 0.95);
+    ctx.fillStyle = '#f0e8ff';
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(r * 0.14, -r * 0.10);
+    ctx.lineTo(r * 0.52, -r * 0.34);
+    ctx.lineTo(r * 0.30, -r * 0.06);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+  };
+
+  // bomb item: black sphere, fuse with sparking tip
+  R.drawBomb = function (ctx, x, y, r, t) {
+    const p = 1 + 0.06 * Math.sin((t || 0) * 5);
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.scale(p, p);
+    // fuse
+    ctx.strokeStyle = '#c9a25e';
+    ctx.lineWidth = r * 0.16;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(r * 0.22, -r * 0.62);
+    ctx.quadraticCurveTo(r * 0.55, -r * 1.05, r * 0.88, -r * 0.85);
+    ctx.stroke();
+    // spark at fuse tip (flickers)
+    const fs = 0.7 + 0.5 * Math.abs(Math.sin((t || 0) * 9));
+    ctx.beginPath(); ctx.arc(r * 0.88, -r * 0.85, r * 0.18 * fs, 0, BO.TAU);
+    ctx.fillStyle = '#ffe063'; ctx.fill();
+    ctx.beginPath(); ctx.arc(r * 0.88, -r * 0.85, r * 0.09 * fs, 0, BO.TAU);
+    ctx.fillStyle = '#fff'; ctx.fill();
+    // body
+    const g = ctx.createRadialGradient(-r * 0.3, -r * 0.35, r * 0.15, 0, 0, r);
+    g.addColorStop(0, '#5a6070');
+    g.addColorStop(0.6, '#2c3040');
+    g.addColorStop(1, '#181c28');
+    ctx.beginPath(); ctx.arc(0, 0, r * 0.82, 0, BO.TAU);
+    ctx.fillStyle = g; ctx.fill();
+    ctx.lineWidth = r * 0.10;
+    ctx.strokeStyle = 'rgba(6,8,16,0.8)'; ctx.stroke();
+    // cap
+    ctx.fillStyle = '#3c4254';
+    R.roundRect(ctx, r * 0.06, -r * 0.72, r * 0.34, r * 0.22, r * 0.06);
+    ctx.fill();
+    // shine
+    ctx.beginPath(); ctx.arc(-r * 0.26, -r * 0.28, r * 0.14, 0, BO.TAU);
+    ctx.fillStyle = 'rgba(255,255,255,0.55)'; ctx.fill();
+    ctx.restore();
+  };
+
   R.drawPlusBall = function (ctx, x, y, r, t) {
     const p = 1 + 0.08 * Math.sin((t || 0) * 4);
     ctx.save();

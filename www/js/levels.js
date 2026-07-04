@@ -6,6 +6,7 @@
 //  'a/b/c/d' triangle (solid corner: bl/br/tl/tr), weight 1
 //  'A/B/C/D' triangle heavy, weight 3
 //  '+'      +1 ball item     'g' gem item     'L' lightning coin
+//  'z'      chain-lightning coin    'o' bomb item
 // ============================================================
 (function () {
   const L = [];
@@ -37,7 +38,7 @@
   L.push({ rows: [ // 5 - twin towers
     '22...22',
     '22.g.22',
-    '22+L+22',
+    '22+z+22',
     '22.g.22',
     '11...11',
   ]});
@@ -62,7 +63,7 @@
   ]});
   L.push({ rows: [ // 8 - fortress
     'c33333d',
-    '3.g.L.3',
+    '3.g.o.3',
     '3.+.g.3',
     '3..+..3',
     'a33333b',
@@ -75,7 +76,7 @@
     '...3...',
     '..2+2..',
     '.3.g.3.',
-    '4..L..4',
+    '4..z..4',
   ]});
   L.push({ rows: [ // 10 - ring
     '.33333.',
@@ -117,13 +118,13 @@
     '55+2+55',
     '...2...',
     '55.2.55',
-    '55L2.55',
+    '55o2.55',
     '..+g+..',
   ]});
   L.push({ rows: [ // 15 - heavy top
     '6666666',
     '5555555',
-    '.g.+L..',
+    '.g.+z..',
     '2.2.2.2',
     '.+...g.',
     '1122211',
@@ -133,7 +134,7 @@
     '55c.d55',
     '555g555',
     '55d+c55',
-    '5d.L.c5',
+    '5d.o.c5',
     '.+...+.',
     '..222..',
   ]});
@@ -142,7 +143,7 @@
     '.5.5.5.',
     '5g5.5+5',
     '.5.5.5.',
-    '5.5L5.5',
+    '5.5z5.5',
     '.5.5.5.',
     '+..g..+',
   ]});
@@ -150,7 +151,7 @@
     '...6...',
     '..656..',
     '.65+56.',
-    '65g.L56',
+    '65g.o56',
     '5544455',
     '.+...+.',
     '..333..',
@@ -159,7 +160,7 @@
     '666.666',
     '666g666',
     '...+...',
-    '666L666',
+    '666z666',
     '666.666',
     '.+...+.',
     '.44g44.',
@@ -179,7 +180,7 @@
     '......7',
     '77777g7',
     '7...7+7',
-    '7.7L7.7',
+    '7.7o7.7',
     '7.777.7',
     '7....+7',
     '7777777',
@@ -188,7 +189,7 @@
     'CdcDCdc',
     '.7g7+7.',
     'BabABab',
-    '.7+7L7.',
+    '.7+7z7.',
     'CdcDCdc',
     '.g.+.g.',
   ]});
@@ -206,7 +207,7 @@
     '8.....8',
     '8.888.8',
     '8.8g8.8',
-    '8.8+8L8',
+    '8.8+8o8',
     '8.888.8',
     '8..+..8',
     '8888888',
@@ -257,7 +258,9 @@
       rows.push(row);
     }
     // sprinkle items into empties
-    const wanted = [['+', 2 + ((R / 3) | 0)], ['g', 1 + ((rnd() * 2.5) | 0)], ['L', rnd() < 0.7 ? 1 : 0]];
+    // sprinkle items into empties; special coins rotate by level number
+    const special = ['L', 'z', 'o'][n % 3];
+    const wanted = [['+', 2 + ((R / 3) | 0)], ['g', 1 + ((rnd() * 2.5) | 0)], [special, rnd() < 0.8 ? 1 : 0]];
     for (const [ch, cnt] of wanted) {
       let placed = 0, guard = 0;
       while (placed < cnt && guard++ < 200) {
@@ -308,6 +311,8 @@
           } else if (ch === '+') items.push({ r, c, type: 'ball' });
           else if (ch === 'g') items.push({ r, c, type: 'gem' });
           else if (ch === 'L') items.push({ r, c, type: 'bolt' });
+          else if (ch === 'z') items.push({ r, c, type: 'chain' });
+          else if (ch === 'o') items.push({ r, c, type: 'bomb' });
         }
       });
       // color tier by relative hp

@@ -322,7 +322,7 @@
         ['3.', 'Bricks descend after each shot.'],
         ['', "Don't let them reach the line!"],
         ['4.', 'Collect  +1 balls,  gems  and'],
-        ['', 'lightning coins on your way.'],
+        ['', 'coins: laser, chain zap, bomb!'],
       ];
       ctx.textAlign = 'left';
       ctx.textBaseline = 'middle';

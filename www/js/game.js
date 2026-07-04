@@ -90,6 +90,8 @@
       if (this.mode === 'limit') this.movesLeft--;
       this.toFire = this.totalShots();
       this.splitArmed = false;
+      this.fireBalls = this.fireArmed;      // this turn shoots fireballs
+      this.fireArmed = false;
       this.fired = 0;
       this.landed = 0;
       this.fireTimer = 0;
@@ -107,6 +109,7 @@
         x: this.launcherX, y: this.launchY - CFG.BALL_R - 1,
         vx: this.fireDir.dx * sp, vy: this.fireDir.dy * sp,
         active: true, recall: false, trail: [],
+        fire: this.fireBalls ? 3 : 0,        // pierce budget for fireballs
       });
       this.fired++;
       if (this.fired % 4 === 1) BO.audio.launch();
@@ -235,6 +238,12 @@
       } else if (it.type === 'bolt') {
         if (silentAuto) return; // lightning not triggered by auto-collect
         this.lightningCross(it.r, it.c);
+      } else if (it.type === 'chain') {
+        if (silentAuto) return;
+        this.chainLightning(r.x, r.y);
+      } else if (it.type === 'bomb') {
+        if (silentAuto) return;
+        this.bombBlast(it.r, it.c);
       }
     },
 
@@ -260,6 +269,79 @@
       for (const b of hitList) {
         const r = this.brickRect(b);
         BO.fx.floatText(r.x + r.s / 2, r.y + r.s / 2, '-' + dmg, { color: '#ffe37a', size: 24 });
+        this.damageBrick(b, dmg, r.x + r.s / 2, r.y + r.s / 2, true);
+      }
+    },
+
+    // chain lightning: arc jumps to nearest bricks, damage decays per hop
+    chainLightning(sx, sy) {
+      const hops = 5;
+      let dmg = Math.max(2, Math.round(this.data.hpUnit * 1.2));
+      let px = sx, py = sy;
+      const hit = new Set();
+      const targets = [];
+      for (let i = 0; i < hops; i++) {
+        // nearest un-hit brick to current point
+        let best = null, bd = Infinity;
+        for (const b of this.bricks) {
+          if (hit.has(b)) continue;
+          const r = this.brickRect(b);
+          const cx = r.x + r.s / 2, cy = r.y + r.s / 2;
+          const d = (cx - px) * (cx - px) + (cy - py) * (cy - py);
+          if (d < bd) { bd = d; best = b; }
+        }
+        if (!best) break;
+        hit.add(best);
+        const r = this.brickRect(best);
+        targets.push({ b: best, x: r.x + r.s / 2, y: r.y + r.s / 2, dmg, from: [px, py] });
+        px = r.x + r.s / 2; py = r.y + r.s / 2;
+        dmg = Math.max(1, Math.round(dmg * 0.75));
+      }
+      if (!targets.length) return;
+      BO.audio.lightning();
+      BO.fx.addShake(6);
+      BO.fx.addEdge(0.4);
+      // staggered arcs for a traveling feel (drained in update())
+      this.chainQueue = this.chainQueue || [];
+      targets.forEach((tg, i) => {
+        this.chainQueue.push({ at: this.t + i * 0.07, tg });
+      });
+    },
+
+    drainChainQueue() {
+      if (!this.chainQueue || !this.chainQueue.length) return;
+      for (let i = this.chainQueue.length - 1; i >= 0; i--) {
+        const q = this.chainQueue[i];
+        if (this.t < q.at) continue;
+        this.chainQueue.splice(i, 1);
+        const tg = q.tg;
+        if (tg.b.hp <= 0) continue;
+        BO.fx.bolt(tg.from[0], tg.from[1], tg.x, tg.y, '#c890ff');
+        BO.fx.flare(tg.x, tg.y, 20, '#e8d0ff');
+        BO.fx.floatText(tg.x, tg.y - 24, '-' + tg.dmg, { color: '#d8b0ff', size: 24 });
+        this.damageBrick(tg.b, tg.dmg, tg.x, tg.y, true);
+      }
+    },
+
+    // bomb: 3x3 blast around the item cell
+    bombBlast(row, col) {
+      const dmg = Math.max(2, Math.round(this.data.hpUnit * 1.5));
+      const cx = col * this.cell + this.cell / 2;
+      const cy = this.boardTop + row * this.cell + this.cell / 2;
+      BO.audio.hammer();
+      BO.fx.addShake(11);
+      BO.fx.addFlash(0.22);
+      BO.fx.addEdge(0.5);
+      BO.fx.ring(cx, cy, '#ffb428', 10, this.cell * 1.9);
+      BO.fx.ring(cx, cy, '#ffffff', 6, this.cell * 1.2);
+      BO.fx.flare(cx, cy, 46, '#ffd890');
+      BO.fx.sparks(cx, cy, '#ff8a28', 18, 520);
+      BO.fx.sparks(cx, cy, '#ffd890', 12, 380);
+      const list = this.bricks.filter(b =>
+        Math.abs(b.r - row) <= 1 && Math.abs(b.c - col) <= 1);
+      for (const b of list) {
+        const r = this.brickRect(b);
+        BO.fx.floatText(r.x + r.s / 2, r.y + r.s / 2, '-' + dmg, { color: '#ffcf6e', size: 24 });
         this.damageBrick(b, dmg, r.x + r.s / 2, r.y + r.s / 2, true);
       }
     },
@@ -302,6 +384,11 @@
         this.splitArmed = true;
         BO.audio.plusBall();
         BO.fx.floatText(this.launcherX, this.launchY - 50, 'x2 BALLS!', { color: '#8ce85c', size: 34 });
+      } else if (kind === 'fire') {
+        this.fireArmed = true;
+        BO.audio.lightning();
+        BO.fx.floatText(this.launcherX, this.launchY - 50, 'FIREBALLS!', { color: '#ffb428', size: 34 });
+        BO.fx.sparks(this.launcherX, this.launchY - 20, '#ff8a28', 10, 300);
       }
     },
 
@@ -390,6 +477,7 @@
       const x0 = br.c * this.cell, y0 = this.boardTop + br.r * this.cell;
       const s = this.cell;
       let nx = 0, ny = 0, hit = false, px = b.x, py = b.y;
+      const pierce = b.fire > 0;             // fireballs pass through
 
       if (br.shape === 'rect') {
         const cx = BO.clamp(b.x, x0, x0 + s);
@@ -408,8 +496,10 @@
             else { nx = 0; ny = 1; }
             d = 0;
           } else { nx = dx / d; ny = dy / d; }
-          b.x = cx + nx * (R + 0.2);
-          b.y = cy + ny * (R + 0.2);
+          if (!pierce) {
+            b.x = cx + nx * (R + 0.2);
+            b.y = cy + ny * (R + 0.2);
+          }
           px = cx; py = cy;
         }
       } else {
@@ -427,12 +517,25 @@
           let d = Math.sqrt(d2);
           if (d < 0.0001) { nx = 0; ny = -1; d = 0; }
           else { nx = dx / d; ny = dy / d; }
-          b.x = cp[0] + nx * (R + 0.2);
-          b.y = cp[1] + ny * (R + 0.2);
+          if (!pierce) {
+            b.x = cp[0] + nx * (R + 0.2);
+            b.y = cp[1] + ny * (R + 0.2);
+          }
           px = cp[0]; py = cp[1];
         }
       }
       if (!hit) return;
+      // fireball: pierce through, no reflection, double damage
+      if (pierce) {
+        b.pierced = b.pierced || new Set();
+        if (b.pierced.has(br)) return;       // still passing through this brick
+        b.pierced.add(br);
+        b.fire--;
+        this.damageBrick(br, 2, px, py);
+        BO.fx.sparks(px, py, '#ff8a28', 6, 340);
+        BO.fx.flare(px, py, 16, '#ffd890');
+        return;
+      }
       // reflect only if moving into surface
       const vn = b.vx * nx + b.vy * ny;
       if (vn < 0) {
@@ -470,6 +573,7 @@
       // combo heat cools between flights
       const cooling = (this.state === 'flight' || this.state === 'winFly') ? 0.055 : 0.5;
       this.heat = Math.max(0, this.heat - dt * cooling);
+      this.drainChainQueue();
 
       if (this.overlay && this.overlay.update) this.overlay.update(dt);
       if (this.overlay) return;
@@ -591,6 +695,8 @@
         const r = cell * 0.24;
         if (it.type === 'ball') BO.R.drawPlusBall(ctx, p.x, p.y, r, it.t);
         else if (it.type === 'gem') BO.R.drawGem(ctx, p.x, p.y, r, Math.sin(it.t * 1.8) * 0.3);
+        else if (it.type === 'chain') BO.R.drawChainCoin(ctx, p.x, p.y, r, it.t);
+        else if (it.type === 'bomb') BO.R.drawBomb(ctx, p.x, p.y, r, it.t);
         else BO.R.drawCoin(ctx, p.x, p.y, r, it.t);
       }
 
@@ -770,19 +876,22 @@
       for (const b of this.balls) {
         const pts = b.trail;
         if (pts.length < 2) continue;
+        const fiery = b.fire > 0;
         for (let i = 1; i < pts.length; i++) {
           const k = i / pts.length;
-          ctx.globalAlpha = k * 0.45;
-          ctx.lineWidth = R * 1.7 * k;
-          ctx.strokeStyle = skin.trail === 'rainbow' ? BO.R.rainbowAt(this.t + i) : skin.trail;
+          ctx.globalAlpha = k * (fiery ? 0.7 : 0.45);
+          ctx.lineWidth = R * (fiery ? 2.6 : 1.7) * k;
+          ctx.strokeStyle = fiery
+            ? 'rgba(255,' + (90 + (140 * k) | 0) + ',20,0.8)'
+            : (skin.trail === 'rainbow' ? BO.R.rainbowAt(this.t + i) : skin.trail);
           ctx.beginPath();
           ctx.moveTo(pts[i - 1].x, pts[i - 1].y);
           ctx.lineTo(pts[i].x, pts[i].y);
           ctx.stroke();
         }
         // connect to current position
-        ctx.globalAlpha = 0.5;
-        ctx.lineWidth = R * 1.7;
+        ctx.globalAlpha = fiery ? 0.8 : 0.5;
+        ctx.lineWidth = R * (fiery ? 2.6 : 1.7);
         ctx.beginPath();
         ctx.moveTo(pts[pts.length - 1].x, pts[pts.length - 1].y);
         ctx.lineTo(b.x, b.y);
@@ -790,7 +899,20 @@
       }
       ctx.restore();
       ctx.globalAlpha = 1;
-      for (const b of this.balls) BO.R.drawBall(ctx, b.x, b.y, R, skin, this.t + b.x * 0.01);
+      for (const b of this.balls) {
+        if (b.fire > 0) {
+          // fireball: hot orb + glow
+          const g = ctx.createRadialGradient(b.x, b.y, 1, b.x, b.y, R * 2.2);
+          g.addColorStop(0, '#fff8d0');
+          g.addColorStop(0.35, '#ffb428');
+          g.addColorStop(0.7, 'rgba(240,88,24,0.5)');
+          g.addColorStop(1, 'rgba(240,88,24,0)');
+          ctx.beginPath(); ctx.arc(b.x, b.y, R * 2.2, 0, BO.TAU);
+          ctx.fillStyle = g; ctx.fill();
+        } else {
+          BO.R.drawBall(ctx, b.x, b.y, R, skin, this.t + b.x * 0.01);
+        }
+      }
     },
 
     // ---------- HUD ----------
@@ -950,6 +1072,29 @@
             BO.R.roundRect(c, -s * 0.06, -s * 0.06, s * 0.12, s * 0.42, 4); c.fill();
             c.restore();
           }],
+          ['fire', W - bs * 2 - 26 - 18, (c, x, yy, s) => {
+            // fireball: orange orb + flame tail
+            c.save();
+            c.translate(x, yy);
+            c.rotate(-0.7);
+            const fg = c.createLinearGradient(-s * 0.4, 0, s * 0.2, 0);
+            fg.addColorStop(0, 'rgba(255,120,20,0)');
+            fg.addColorStop(1, 'rgba(255,150,40,0.85)');
+            c.fillStyle = fg;
+            c.beginPath();
+            c.moveTo(-s * 0.42, 0);
+            c.quadraticCurveTo(-s * 0.1, -s * 0.16, s * 0.12, -s * 0.10);
+            c.lineTo(s * 0.12, s * 0.10);
+            c.quadraticCurveTo(-s * 0.1, s * 0.16, -s * 0.42, 0);
+            c.fill();
+            const g2 = c.createRadialGradient(s * 0.08, -s * 0.04, s * 0.02, s * 0.12, 0, s * 0.2);
+            g2.addColorStop(0, '#fff3b0');
+            g2.addColorStop(0.5, '#ffb428');
+            g2.addColorStop(1, '#f05818');
+            c.beginPath(); c.arc(s * 0.12, 0, s * 0.18, 0, BO.TAU);
+            c.fillStyle = g2; c.fill();
+            c.restore();
+          }],
           ['split', W - bs - 26, (c, x, yy, s) => {
             const sk = BO.store.skinDef();
             BO.R.drawBall(c, x - s * 0.14, yy - s * 0.10, s * 0.16, sk, this.t);
@@ -958,13 +1103,16 @@
           }],
         ];
         for (const [kind, bx, icon] of defs) {
-          const armed = this.boosterArm === kind || (kind === 'split' && this.splitArmed);
+          const armed = this.boosterArm === kind
+            || (kind === 'split' && this.splitArmed)
+            || (kind === 'fire' && this.fireArmed);
           const rect = BO.R.button3D(ctx, bx, y, bs, bs, {
             color: armed ? '#2fbb2f' : '#333a52',
             depth: 7, radius: 16, disabled: !can && !armed, icon,
           });
           // cost chip
-          if (!(kind === 'split' && this.splitArmed)) {
+          const ready = (kind === 'split' && this.splitArmed) || (kind === 'fire' && this.fireArmed);
+          if (!ready) {
             const ccx = bx + bs / 2;
             BO.R.drawGem(ctx, ccx - 22, y + bs + 22, 10, 0);
             BO.R.outlineText(ctx, '' + CFG.BOOSTER_COST, ccx + 12, y + bs + 22, 19,
@@ -977,6 +1125,7 @@
           }
           if (kind === 'bolt') this.btnBolt = rect;
           else if (kind === 'hammer') this.btnHammer = rect;
+          else if (kind === 'fire') this.btnFireball = rect;
           else this.btnSplit = rect;
         }
       } else {
@@ -1157,8 +1306,10 @@
           // boosters
           if (BO.inRect(x, y, this.btnBolt)) { this.useBooster('bolt'); return; }
           if (BO.inRect(x, y, this.btnHammer)) { this.useBooster('hammer'); return; }
+          if (BO.inRect(x, y, this.btnFireball)) { this.useBooster('fire'); return; }
           if (BO.inRect(x, y, this.btnSplit)) { this.useBooster('split'); return; }
-          if (this.boosterArm && !BO.inRect(x, y, this['btn' + this.boosterArm[0].toUpperCase() + this.boosterArm.slice(1)])) {
+          const armBtn = { bolt: this.btnBolt, hammer: this.btnHammer, fire: this.btnFireball, split: this.btnSplit }[this.boosterArm];
+          if (this.boosterArm && !BO.inRect(x, y, armBtn)) {
             this.boosterArm = null;
           }
         }
