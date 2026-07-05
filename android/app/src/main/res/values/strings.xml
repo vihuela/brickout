@@ -1,6 +1,5 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
-    <!-- app_name / title_activity_main are provided per-flavor via resValue -->
-    <string name="package_name">com.h5.brickout</string>
-    <string name="custom_url_scheme">com.h5.brickout</string>
+    <!-- app_name / title_activity_main / package_name / custom_url_scheme
+         are provided per-flavor via resValue in app/build.gradle -->
 </resources>

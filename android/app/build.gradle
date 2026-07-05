@@ -13,7 +13,9 @@ android {
     namespace "com.h5.brickout"
     compileSdk rootProject.ext.compileSdkVersion
     defaultConfig {
-        applicationId "com.h5.brickout"
+        // SEO-keyworded, store-unique application id (namespace/Java package
+        // stays com.h5.brickout - the two are independent)
+        applicationId "com.brickverse.bricksbreaker.balls"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1
@@ -42,6 +44,8 @@ android {
             applicationIdSuffix ".dev"
             resValue "string", "app_name", "Brick Out Dev"
             resValue "string", "title_activity_main", "Brick Out Dev"
+            resValue "string", "package_name", "com.brickverse.bricksbreaker.balls.dev"
+            resValue "string", "custom_url_scheme", "com.brickverse.bricksbreaker.balls.dev"
             // dev builds always use the debug key, even for release buildType
             signingConfig signingConfigs.debug
         }
@@ -49,6 +53,8 @@ android {
             dimension "env"
             resValue "string", "app_name", "Brick Out"
             resValue "string", "title_activity_main", "Brick Out"
+            resValue "string", "package_name", "com.brickverse.bricksbreaker.balls"
+            resValue "string", "custom_url_scheme", "com.brickverse.bricksbreaker.balls"
         }
     }
     buildTypes {

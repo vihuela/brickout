@@ -8,7 +8,7 @@ packaged as an Android APK with Capacitor.
 ## Play
 
 - **Web**: open `www/index.html` in any browser (desktop: drag with mouse).
-- **Android**: install `BrickOut-debug.apk`.
+- **Android**: install `BrickOut-prod-release.apk`.
 
 ## Features
 
