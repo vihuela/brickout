@@ -12,6 +12,7 @@
     skin: 'lime',
     owned: ['lime'],
     sound: true,
+    lang: 'auto',      // 'auto' follows device language
     stars: {},         // (modePrefix+level) -> stars
     best: {},          // level -> best score
   };
@@ -46,6 +47,8 @@
     set skin(v) { data.skin = v; save(); },
     get sound() { return data.sound; },
     set sound(v) { data.sound = !!v; save(); },
+    get lang() { return data.lang || 'auto'; },
+    set lang(v) { data.lang = v; save(); },
     owns(id) { return data.owned.indexOf(id) >= 0; },
     buy(id) { if (!this.owns(id)) { data.owned.push(id); save(); } },
     starKey(lv, mode) { return (mode && mode !== 'classic' ? mode[0] + '_' : '') + lv; },

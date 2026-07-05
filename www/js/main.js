@@ -74,6 +74,7 @@
   // ---------- debug hooks (headless screenshots) ----------
   const qs = new URLSearchParams(location.search);
   BO.debugAuto = qs.get('auto') === '1';
+  if (qs.get('lang')) BO.store.lang = qs.get('lang');
 
   // ---------- loop ----------
   let last = performance.now();

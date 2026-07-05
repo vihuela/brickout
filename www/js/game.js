@@ -212,7 +212,7 @@
       // combo popups
       while (this.comboIdx < BO.COMBOS.length && this.comboCount >= BO.COMBOS[this.comboIdx].at) {
         const cb = BO.COMBOS[this.comboIdx];
-        BO.fx.combo(cb.txt, this.W / 2, this.boardTop + (this.launchY - this.boardTop) * 0.42);
+        BO.fx.combo(BO.T('combo' + this.comboIdx), this.W / 2, this.boardTop + (this.launchY - this.boardTop) * 0.42);
         BO.fx.addShake(5);
         BO.fx.addEdge(0.45);
         this.heat = Math.min(1, this.heat + 0.25);
@@ -383,11 +383,11 @@
       } else if (kind === 'split') {
         this.splitArmed = true;
         BO.audio.plusBall();
-        BO.fx.floatText(this.launcherX, this.launchY - 50, 'x2 BALLS!', { color: '#8ce85c', size: 34 });
+        BO.fx.floatText(this.launcherX, this.launchY - 50, BO.T('x2balls'), { color: '#8ce85c', size: 34 });
       } else if (kind === 'fire') {
         this.fireArmed = true;
         BO.audio.lightning();
-        BO.fx.floatText(this.launcherX, this.launchY - 50, 'FIREBALLS!', { color: '#ffb428', size: 34 });
+        BO.fx.floatText(this.launcherX, this.launchY - 50, BO.T('fireballs'), { color: '#ffb428', size: 34 });
         BO.fx.sparks(this.launcherX, this.launchY - 20, '#ff8a28', 10, 300);
       }
     },
@@ -671,7 +671,7 @@
       if (this.banner > 0 && (this.state === 'intro' || this.state === 'ready')) {
         const a = Math.min(1, this.banner / 0.4);
         ctx.globalAlpha = a;
-        BO.R.outlineText(ctx, 'LEVEL ' + this.levelNum, W / 2, this.boardTop + (this.launchY - this.boardTop) * 0.30, 64, '#fff');
+        BO.R.outlineText(ctx, BO.T('level', this.levelNum), W / 2, this.boardTop + (this.launchY - this.boardTop) * 0.30, 64, '#fff');
         ctx.globalAlpha = 1;
       }
 
@@ -781,7 +781,7 @@
       ctx.restore();
 
       if (this.hammerMode) {
-        BO.R.outlineText(ctx, 'TAP A ROW TO SMASH', this.W / 2, this.boardTop + 40, 30, '#ffb0a0');
+        BO.R.outlineText(ctx, BO.T('smashRow'), this.W / 2, this.boardTop + 40, 30, '#ffb0a0');
       }
     },
 
@@ -952,14 +952,15 @@
       ctx.textAlign = 'center';
       ctx.font = '800 24px ' + BO.FONT;
       ctx.fillStyle = BO.PAL.txtDim;
-      const lvlTxt = 'LEVEL ' + this.levelNum;
+      const lvlTxt = BO.T('level', this.levelNum);
       ctx.fillText(lvlTxt, W / 2, st + 26);
       // mode tag next to level text
       if (this.mode !== 'classic') {
+        const mdName = BO.T('mode_' + this.mode);
         const md = BO.MODES.find(m => m.id === this.mode);
         const tw = ctx.measureText(lvlTxt).width;
         ctx.font = '800 17px ' + BO.FONT;
-        const mw = ctx.measureText(md.name).width + 18;
+        const mw = ctx.measureText(mdName).width + 18;
         BO.R.roundRect(ctx, W / 2 + tw / 2 + 10, st + 13, mw, 26, 13);
         ctx.fillStyle = BO.R.rgba(md.color, 0.25);
         ctx.fill();
@@ -967,7 +968,7 @@
         ctx.lineWidth = 2;
         ctx.stroke();
         ctx.fillStyle = md.color;
-        ctx.fillText(md.name, W / 2 + tw / 2 + 10 + mw / 2, st + 27);
+        ctx.fillText(mdName, W / 2 + tw / 2 + 10 + mw / 2, st + 27);
       }
       BO.R.outlineText(ctx, '' + this.score, W / 2, st + 60, 40, '#fff');
       // combo heat: score ignites (competitor-style flaming number)
@@ -1044,7 +1045,7 @@
         ctx.lineWidth = 2.5;
         ctx.strokeStyle = low ? BO.R.rgba('#e8453c', pulse) : 'rgba(245,139,31,0.8)';
         ctx.stroke();
-        BO.R.outlineText(ctx, 'MOVES: ' + Math.max(0, this.movesLeft), W / 2, py2 + 1, 25,
+        BO.R.outlineText(ctx, BO.T('moves', Math.max(0, this.movesLeft)), W / 2, py2 + 1, 25,
           low ? '#ff8a7a' : '#ffcf6e');
       }
     },
@@ -1118,10 +1119,10 @@
             BO.R.outlineText(ctx, '' + CFG.BOOSTER_COST, ccx + 12, y + bs + 22, 19,
               can ? '#ffe063' : '#e86a6a');
           } else {
-            BO.R.outlineText(ctx, 'READY', bx + bs / 2, y + bs + 22, 19, '#8ce85c');
+            BO.R.outlineText(ctx, BO.T('ready'), bx + bs / 2, y + bs + 22, 19, '#8ce85c');
           }
           if (this.boosterArm === kind) {
-            BO.R.outlineText(ctx, 'TAP AGAIN', bx + bs / 2, y - 16, 19, '#8ce85c');
+            BO.R.outlineText(ctx, BO.T('tapAgain'), bx + bs / 2, y - 16, 19, '#8ce85c');
           }
           if (kind === 'bolt') this.btnBolt = rect;
           else if (kind === 'hammer') this.btnHammer = rect;
@@ -1151,7 +1152,7 @@
       const pw = W * 0.84, ph = H * 0.44;
       const px = (W - pw) / 2, py = (H - ph) / 2;
       BO.ui.panel(ctx, px, py, pw, ph);
-      BO.R.outlineText(ctx, 'LEVEL CLEARED!', W / 2, py + 64, 44, '#8ce85c');
+      BO.R.outlineText(ctx, BO.T('cleared'), W / 2, py + 64, 44, '#8ce85c');
       // stars
       const t = this.starT || 0;
       for (let i = 0; i < 3; i++) {
@@ -1170,12 +1171,12 @@
         BO.R.drawStar(ctx, 0, 0, i === 1 ? 52 : 42, lit);
         ctx.restore();
       }
-      BO.R.outlineText(ctx, 'SCORE  ' + this.score, W / 2, py + 250, 30, '#dfe5fa');
+      BO.R.outlineText(ctx, BO.T('score') + '  ' + this.score, W / 2, py + 250, 30, '#dfe5fa');
       // gems
       BO.R.drawGem(ctx, W / 2 - 56, py + 302, 16, 0);
       BO.R.outlineText(ctx, '+' + (this.gemReward + this.gemsGot), W / 2 + 6, py + 302, 30, '#ffe063');
       this.btnNext = BO.R.button3D(ctx, W / 2 - pw * 0.28, py + ph - 110, pw * 0.56, 82,
-        { color: '#2fbb2f', text: 'NEXT', size: 38 });
+        { color: '#2fbb2f', text: BO.T('next'), size: 38 });
       this.btnHome = BO.R.button3D(ctx, px + 30, py + ph - 102, 92, 66,
         { color: '#3d8bff', text: '⌂', size: 34 });
       this.btnRetryS = BO.R.button3D(ctx, px + pw - 122, py + ph - 102, 92, 66,
@@ -1187,16 +1188,16 @@
       const pw = W * 0.84, ph = H * 0.34;
       const px = (W - pw) / 2, py = (H - ph) / 2;
       BO.ui.panel(ctx, px, py, pw, ph);
-      BO.R.outlineText(ctx, 'LEVEL FAILED', W / 2, py + 70, 44, '#ff7a6a');
+      BO.R.outlineText(ctx, BO.T('failed'), W / 2, py + 70, 44, '#ff7a6a');
       if (this.loseReason === 'moves') {
-        BO.R.outlineText(ctx, 'OUT OF MOVES!', W / 2, py + 130, 30, '#ffcf6e');
+        BO.R.outlineText(ctx, BO.T('outOfMoves'), W / 2, py + 130, 30, '#ffcf6e');
       } else {
         const progress = Math.round(BO.clamp(this.score / this.data.totalHP, 0, 1) * 100);
-        BO.R.outlineText(ctx, progress + '% DESTROYED', W / 2, py + 130, 28, '#dfe5fa');
+        BO.R.outlineText(ctx, BO.T('destroyed', progress), W / 2, py + 130, 28, '#dfe5fa');
       }
-      BO.R.outlineText(ctx, "Don't give up!", W / 2, py + 176, 24, '#8b93b0');
+      BO.R.outlineText(ctx, BO.T('dontGiveUp'), W / 2, py + 176, 24, '#8b93b0');
       this.btnRetry = BO.R.button3D(ctx, W / 2 - pw * 0.28, py + ph - 112, pw * 0.56, 82,
-        { color: '#2fbb2f', text: 'RETRY', size: 38 });
+        { color: '#2fbb2f', text: BO.T('retry'), size: 38 });
       this.btnHome = BO.R.button3D(ctx, px + 30, py + ph - 102, 92, 66,
         { color: '#3d8bff', text: '⌂', size: 34 });
     },
@@ -1210,14 +1211,14 @@
         const pw = W * 0.74, ph = H * 0.46;
         const px = (W - pw) / 2, py = (H - ph) / 2;
         BO.ui.panel(ctx, px, py, pw, ph);
-        BO.R.outlineText(ctx, 'PAUSED', W / 2, py + 60, 42, '#fff');
+        BO.R.outlineText(ctx, BO.T('paused'), W / 2, py + 60, 42, '#fff');
         const bw = pw * 0.72, bx = W / 2 - bw / 2;
-        o.rResume = BO.R.button3D(ctx, bx, py + 110, bw, 74, { color: '#2fbb2f', text: 'RESUME', size: 32 });
-        o.rRestart = BO.R.button3D(ctx, bx, py + 210, bw, 74, { color: '#3d8bff', text: 'RESTART', size: 32 });
+        o.rResume = BO.R.button3D(ctx, bx, py + 110, bw, 74, { color: '#2fbb2f', text: BO.T('resume'), size: 32 });
+        o.rRestart = BO.R.button3D(ctx, bx, py + 210, bw, 74, { color: '#3d8bff', text: BO.T('restart'), size: 32 });
         o.rSound = BO.R.button3D(ctx, bx, py + 310, bw, 74, {
-          color: '#333a52', text: 'SOUND: ' + (BO.store.sound ? 'ON' : 'OFF'), size: 28,
+          color: '#333a52', text: BO.store.sound ? BO.T('soundOn') : BO.T('soundOff'), size: 28,
         });
-        o.rHome = BO.R.button3D(ctx, bx, py + 410, bw, 74, { color: '#e8453c', text: 'HOME', size: 32 });
+        o.rHome = BO.R.button3D(ctx, bx, py + 410, bw, 74, { color: '#e8453c', text: BO.T('home'), size: 32 });
       };
       o.pointer = function (type, x, y) {
         if (type !== 'up') return null;
