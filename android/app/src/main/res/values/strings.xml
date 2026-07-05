@@ -1,7 +1,6 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
-    <string name="app_name">Brick Out</string>
-    <string name="title_activity_main">Brick Out</string>
+    <!-- app_name / title_activity_main are provided per-flavor via resValue -->
     <string name="package_name">com.h5.brickout</string>
     <string name="custom_url_scheme">com.h5.brickout</string>
 </resources>

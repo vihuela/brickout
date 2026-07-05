@@ -1,0 +1,84 @@
+name: Build APK
+
+on:
+  workflow_dispatch:
+    inputs:
+      flavor:
+        description: 'Build flavor'
+        type: choice
+        default: dev
+        options: [dev, prod, both]
+      buildType:
+        description: 'Build type'
+        type: choice
+        default: release
+        options: [release, debug]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Install dependencies & sync Capacitor
+        run: |
+          npm ci
+          npx cap sync android
+
+      # Writes keystore.properties from Secrets. Skipped when secrets are
+      # missing (e.g. forks) - release builds then use the debug keystore.
+      - name: Set up release signing
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+        run: |
+          if [ -z "$KEYSTORE_BASE64" ]; then
+            echo "No signing secrets - falling back to debug keystore."
+            exit 0
+          fi
+          echo "$KEYSTORE_BASE64" | base64 -d > android/release.jks
+          cat > android/keystore.properties <<EOF
+          storeFile=$GITHUB_WORKSPACE/android/release.jks
+          storePassword=$KEYSTORE_PASSWORD
+          keyAlias=$KEY_ALIAS
+          keyPassword=$KEYSTORE_PASSWORD
+          EOF
+
+      - name: Build
+        working-directory: android
+        run: |
+          case "${{ inputs.flavor }}" in
+            dev)  TASKS="assembleDev${{ inputs.buildType == 'release' && 'Release' || 'Debug' }}" ;;
+            prod) TASKS="assembleProd${{ inputs.buildType == 'release' && 'Release' || 'Debug' }}" ;;
+            both) TASKS="assembleDev${{ inputs.buildType == 'release' && 'Release' || 'Debug' }} assembleProd${{ inputs.buildType == 'release' && 'Release' || 'Debug' }}" ;;
+          esac
+          ./gradlew $TASKS
+
+      - name: Collect APKs
+        run: |
+          mkdir -p dist
+          find android/app/build/outputs/apk -name '*.apk' -exec cp {} dist/ \;
+          ls -la dist/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: brickout-${{ inputs.flavor }}-${{ inputs.buildType }}-${{ github.run_number }}
+          path: dist/*.apk
+          retention-days: 30
+
+      - name: Cleanup keystore
+        if: always()
+        run: rm -f android/release.jks android/keystore.properties

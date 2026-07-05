@@ -1,5 +1,14 @@
 apply plugin: 'com.android.application'
 
+// Release signing: android/keystore.properties (gitignored).
+// Local dev points storeFile at ~/keystores/; CI writes it from GitHub Secrets.
+// When absent, release builds fall back to the debug keystore so forks still build.
+def keystorePropsFile = rootProject.file('keystore.properties')
+def keystoreProps = new Properties()
+if (keystorePropsFile.exists()) {
+    keystorePropsFile.withInputStream { keystoreProps.load(it) }
+}
+
 android {
     namespace "com.h5.brickout"
     compileSdk rootProject.ext.compileSdkVersion
@@ -16,10 +25,37 @@ android {
             ignoreAssetsPattern '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    signingConfigs {
+        release {
+            if (keystorePropsFile.exists()) {
+                storeFile file(keystoreProps['storeFile'])
+                storePassword keystoreProps['storePassword']
+                keyAlias keystoreProps['keyAlias']
+                keyPassword keystoreProps['keyPassword']
+            }
+        }
+    }
+    flavorDimensions = ["env"]
+    productFlavors {
+        dev {
+            dimension "env"
+            applicationIdSuffix ".dev"
+            resValue "string", "app_name", "Brick Out Dev"
+            resValue "string", "title_activity_main", "Brick Out Dev"
+            // dev builds always use the debug key, even for release buildType
+            signingConfig signingConfigs.debug
+        }
+        prod {
+            dimension "env"
+            resValue "string", "app_name", "Brick Out"
+            resValue "string", "title_activity_main", "Brick Out"
+        }
+    }
     buildTypes {
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            signingConfig keystorePropsFile.exists() ? signingConfigs.release : signingConfigs.debug
         }
     }
 }
