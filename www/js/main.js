@@ -71,6 +71,17 @@
   canvas.addEventListener('pointercancel', () => { pointerActive = false; });
   window.addEventListener('contextmenu', e => e.preventDefault());
 
+  // hardware back button (Android): scenes decide, otherwise exit
+  (function () {
+    const C = window.Capacitor;
+    if (C && C.Plugins && C.Plugins.App) {
+      C.Plugins.App.addListener('backButton', () => {
+        const handled = scene && scene.onBack && scene.onBack();
+        if (!handled) C.Plugins.App.exitApp();
+      });
+    }
+  })();
+
   // ---------- debug hooks (headless screenshots) ----------
   const qs = new URLSearchParams(location.search);
   BO.debugAuto = qs.get('auto') === '1';

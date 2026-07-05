@@ -1231,6 +1231,31 @@
       return o;
     },
 
+    // hardware back: always consumed in-game
+    onBack() {
+      if (this.overlay) {           // close any open panel (pause/shop/help)
+        this.overlay = null;
+        BO.audio.click();
+        return true;
+      }
+      if (this.state === 'win' || this.state === 'lose') {
+        BO.go('title');
+        return true;
+      }
+      if (this.hammerMode) {        // cancel hammer targeting
+        this.hammerMode = false;
+        return true;
+      }
+      // aiming? drop the aim, then pause
+      if (this.state === 'aiming') {
+        this.state = 'ready';
+        this.aim = null;
+      }
+      this.overlay = this.makePause();
+      BO.audio.click();
+      return true;
+    },
+
     // ---------- input ----------
     pointer(type, x, y) {
       if (this.overlay) {

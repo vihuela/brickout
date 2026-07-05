@@ -216,6 +216,14 @@
 
       if (this.overlay) this.overlay.draw(ctx, W, H);
     },
+    onBack() {
+      if (this.overlay) {
+        this.overlay = null;
+        BO.audio.click();
+        return true;
+      }
+      return false;  // let the app exit from the title screen
+    },
     pointer(type, x, y) {
       if (this.overlay) {
         if (this.overlay.pointer(type, x, y) === 'close') this.overlay = null;
