@@ -1,4 +1,4 @@
-name: Build APK
+name: Build AAB
 
 on:
   workflow_dispatch:
@@ -46,14 +46,14 @@ jobs:
           keyPassword=$KEYSTORE_PASSWORD
           EOF
 
-      - name: Build prod release
+      - name: Build prod release AAB
         working-directory: android
-        run: ./gradlew assembleProdRelease
+        run: ./gradlew bundleProdRelease
 
       - uses: actions/upload-artifact@v4
         with:
-          name: brickout-prod-release-${{ github.run_number }}
-          path: android/app/build/outputs/apk/prod/release/*.apk
+          name: brickout-prod-release-aab-${{ github.run_number }}
+          path: android/app/build/outputs/bundle/prodRelease/*.aab
           retention-days: 30
 
       - name: Cleanup keystore
