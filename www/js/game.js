@@ -40,6 +40,7 @@
     this.autoT = 0;
     this.heat = 0;                 // 0..1 combo heat -> flaming score
     this.emberT = 0;
+    BO.track('level_start', { level: levelNum, mode: this.mode });
   };
 
   BO.GameScene.prototype = {
@@ -142,6 +143,7 @@
         if (this.boardTop + (b.r + 1) * this.cell > this.launchY - 4) {
           this.loseReason = 'line';
           this.state = 'losing';
+          BO.track('level_fail', { level: this.levelNum, mode: this.mode, reason: 'line' });
           this.stateT = 0;
           BO.fx.addShake(12);
           BO.fx.addFlash(0.35);
@@ -153,6 +155,7 @@
       if (this.mode === 'limit' && this.movesLeft <= 0 && this.bricks.length > 0) {
         this.loseReason = 'moves';
         this.state = 'losing';
+        BO.track('level_fail', { level: this.levelNum, mode: this.mode, reason: 'moves' });
         this.stateT = 0;
         BO.fx.addFlash(0.25);
         BO.audio.lose();
@@ -180,6 +183,7 @@
       }
       BO.fx.confetti(this.W, this.H);
       BO.audio.win();
+      BO.track('level_win', { level: this.levelNum, mode: this.mode, stars: this.stars, turns: this.turns });
       this.starT = 0;
     },
 
@@ -224,6 +228,7 @@
 
     collectItem(it, silentAuto) {
       const r = this.itemPos(it);
+      if (!silentAuto) BO.track('item_collect', { type: it.type, level: this.levelNum });
       if (it.type === 'ball') {
         this.ballsBonus++;
         BO.fx.floatText(r.x, r.y - 20, '+1', { color: '#8ce85c', size: 30 });
@@ -360,6 +365,7 @@
       }
       this.boosterArm = null;
       BO.store.gems -= CFG.BOOSTER_COST;
+      BO.track('booster_use', { kind, level: this.levelNum, mode: this.mode });
       if (kind === 'bolt') {
         const dmg = this.data.hpUnit;
         BO.fx.addFlash(0.25);

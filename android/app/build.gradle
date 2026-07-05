@@ -86,11 +86,17 @@ dependencies {
 
 apply from: 'capacitor.build.gradle'
 
-try {
-    def servicesJSON = file('google-services.json')
-    if (servicesJSON.text) {
-        apply plugin: 'com.google.gms.google-services'
+// Firebase (prod flavor only): google-services.json lives in src/prod/, where
+// the google-services plugin's per-variant lookup finds it. Dev builds have no
+// json and must not run the plugins, so tasks for dev variants are disabled.
+if (file('src/prod/google-services.json').exists()) {
+    apply plugin: 'com.google.gms.google-services'
+    apply plugin: 'com.google.firebase.crashlytics'
+    android.applicationVariants.configureEach { variant ->
+        if (variant.flavorName == 'dev') {
+            tasks.matching {
+                it.name.contains("GoogleServices") && it.name.contains('Dev')
+            }.configureEach { enabled = false }
+        }
     }
-} catch(Exception e) {
-    logger.info("google-services.json not found, google-services plugin not applied. Push Notifications won't work")
 }

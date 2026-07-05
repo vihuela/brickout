@@ -317,6 +317,7 @@
             BO.store.buy(s.id);
             BO.store.skin = s.id;
             BO.audio.gem();
+            BO.track('skin_buy', { skin: s.id, cost: s.cost });
           } else {
             BO.audio.lose();
           }

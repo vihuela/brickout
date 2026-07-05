@@ -101,6 +101,7 @@
       } catch (err) {
         errMsg = (err && err.stack ? err.stack : '' + err).split('\n').slice(0, 2).join(' ');
         console.error(err);
+        if (BO.crash) BO.crash.record(err, 'game-loop');
       }
     }
     if (errMsg) {
