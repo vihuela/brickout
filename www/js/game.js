@@ -228,12 +228,15 @@
         this.ballsBonus++;
         BO.fx.floatText(r.x, r.y - 20, '+1', { color: '#8ce85c', size: 30 });
         BO.fx.ring(r.x, r.y, '#5ad02e', 4, 46);
+        BO.fx.sparks(r.x, r.y, '#8ce85c', 6, 240);
         BO.audio.plusBall();
       } else if (it.type === 'gem') {
         this.gemsGot++;
         BO.store.gems += 1;
         BO.fx.floatText(r.x, r.y - 20, '+1', { color: '#ffe063', size: 30 });
-        BO.fx.sparks(r.x, r.y, '#ffd11a', 8, 260);
+        BO.fx.sparks(r.x, r.y, '#ffd11a', 10, 300);
+        BO.fx.flare(r.x, r.y, 18, '#ffe9a0');
+        BO.fx.ring(r.x, r.y, '#ffc21c', 4, 52);
         BO.audio.gem();
       } else if (it.type === 'bolt') {
         if (silentAuto) return; // lightning not triggered by auto-collect
@@ -337,6 +340,7 @@
       BO.fx.flare(cx, cy, 46, '#ffd890');
       BO.fx.sparks(cx, cy, '#ff8a28', 18, 520);
       BO.fx.sparks(cx, cy, '#ffd890', 12, 380);
+      BO.fx.smoke(cx, cy, 7);
       const list = this.bricks.filter(b =>
         Math.abs(b.r - row) <= 1 && Math.abs(b.c - col) <= 1);
       for (const b of list) {
@@ -413,6 +417,10 @@
         if (!b.active) continue;
         b.trail.push({ x: b.x, y: b.y });
         if (b.trail.length > CFG.TRAIL_LEN) b.trail.shift();
+        // fireballs shed embers along their path
+        if (b.fire > 0 && Math.random() < 0.35) {
+          BO.fx.sparks(b.x, b.y, Math.random() < 0.5 ? '#ff8a28' : '#ffd890', 1, 130);
+        }
         let remain = dt;
         let guard = 0;
         while (remain > 1e-5 && b.active && guard++ < 400) {
@@ -689,15 +697,65 @@
       ctx.clip();
 
       const off = this.descOffset();
-      // items
+      // items: pulsing aura + icon + occasional idle sparkle
       for (const it of this.items) {
         const p = this.itemPos(it);
         const r = cell * 0.24;
-        if (it.type === 'ball') BO.R.drawPlusBall(ctx, p.x, p.y, r, it.t);
-        else if (it.type === 'gem') BO.R.drawGem(ctx, p.x, p.y, r, Math.sin(it.t * 1.8) * 0.3);
-        else if (it.type === 'chain') BO.R.drawChainCoin(ctx, p.x, p.y, r, it.t);
-        else if (it.type === 'bomb') BO.R.drawBomb(ctx, p.x, p.y, r, it.t);
-        else BO.R.drawCoin(ctx, p.x, p.y, r, it.t);
+        // aura color per type
+        const aura = it.type === 'ball' ? '#5ad02e'
+          : it.type === 'gem' ? '#ffc21c'
+          : it.type === 'chain' ? '#a45cf5'
+          : it.type === 'bomb' ? '#ff6a3c'
+          : '#ffd11a';
+        const pulse = 0.72 + 0.28 * Math.sin(it.t * 2.6);
+        ctx.save();
+        ctx.globalCompositeOperation = 'lighter';
+        const ag = ctx.createRadialGradient(p.x, p.y, r * 0.3, p.x, p.y, r * (1.7 + pulse * 0.35));
+        ag.addColorStop(0, BO.R.rgba(aura, 0.20 * pulse));
+        ag.addColorStop(0.7, BO.R.rgba(aura, 0.08 * pulse));
+        ag.addColorStop(1, BO.R.rgba(aura, 0));
+        ctx.fillStyle = ag;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, r * 2.2, 0, BO.TAU);
+        ctx.fill();
+        // orbiting glints
+        for (let k = 0; k < 2; k++) {
+          const a = it.t * 1.4 + k * Math.PI;
+          const ox = p.x + Math.cos(a) * r * 1.5;
+          const oy = p.y + Math.sin(a) * r * 0.62;
+          const behind = Math.sin(a) < 0;
+          if (!behind) continue;         // draw only the back-side pass here
+          ctx.globalAlpha = 0.5;
+          ctx.beginPath(); ctx.arc(ox, oy, 2.6, 0, BO.TAU);
+          ctx.fillStyle = '#fff'; ctx.fill();
+        }
+        ctx.restore();
+        // bob animation
+        const bob = Math.sin(it.t * 2.2) * 3;
+        if (it.type === 'ball') BO.R.drawPlusBall(ctx, p.x, p.y + bob, r, it.t);
+        else if (it.type === 'gem') BO.R.drawGem(ctx, p.x, p.y + bob, r, Math.sin(it.t * 1.8) * 0.3);
+        else if (it.type === 'chain') BO.R.drawChainCoin(ctx, p.x, p.y + bob, r, it.t);
+        else if (it.type === 'bomb') {
+          BO.R.drawBomb(ctx, p.x, p.y + bob, r, it.t);
+          // fuse pre-burn: tiny sparks dripping from the fuse tip
+          if ((it.t * 6 | 0) % 3 === 0 && Math.random() < 0.25) {
+            BO.fx.sparks(p.x + r * 0.88, p.y + bob - r * 0.85, '#ffe063', 1, 90);
+          }
+        }
+        else BO.R.drawCoin(ctx, p.x, p.y + bob, r, it.t);
+        // front-side orbit pass
+        ctx.save();
+        ctx.globalCompositeOperation = 'lighter';
+        for (let k = 0; k < 2; k++) {
+          const a = it.t * 1.4 + k * Math.PI;
+          if (Math.sin(a) < 0) continue;
+          const ox = p.x + Math.cos(a) * r * 1.5;
+          const oy = p.y + bob + Math.sin(a) * r * 0.62;
+          ctx.globalAlpha = 0.85;
+          ctx.beginPath(); ctx.arc(ox, oy, 2.6, 0, BO.TAU);
+          ctx.fillStyle = '#fff'; ctx.fill();
+        }
+        ctx.restore();
       }
 
       // bricks

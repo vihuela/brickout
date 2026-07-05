@@ -69,6 +69,18 @@
         });
       }
     },
+    // slow rising smoke puffs (bomb aftermath)
+    smoke(x, y, n) {
+      for (let i = 0; i < n; i++) {
+        push({
+          kind: 'smoke',
+          x: x + BO.rand(-18, 18), y: y + BO.rand(-14, 14),
+          vx: BO.rand(-40, 40), vy: BO.rand(-110, -40),
+          s: BO.rand(10, 22), color: null,
+          life: 1, decay: BO.rand(0.9, 1.5), grav: -60,
+        });
+      }
+    },
     confetti(W, H) {
       const cols = ['#f0389c', '#f8a01e', '#ffc61c', '#58c832', '#2e8cf0', '#8850e8'];
       for (let i = 0; i < 90; i++) {
@@ -109,7 +121,19 @@
         const len = Math.hypot(dx, dy) || 1;
         pts.push([px + dx / len * perp, py + dy / len * perp]);
       }
-      bolts.push({ pts, t: 0, dur: 0.28, color: color || '#ffe37a' });
+      const b = { pts, t: 0, dur: 0.28, color: color || '#ffe37a', branches: [] };
+      // 2-3 forked twigs off random midpoints
+      const nb = 2 + (Math.random() * 2 | 0);
+      for (let k = 0; k < nb; k++) {
+        const i = 2 + (Math.random() * (n - 4) | 0);
+        const [bx, by] = pts[i];
+        const ang = Math.atan2(y1 - y0, x1 - x0) + BO.rand(-1.4, 1.4);
+        const len = BO.rand(20, 46);
+        const mx = bx + Math.cos(ang) * len * 0.55 + BO.rand(-7, 7);
+        const my = by + Math.sin(ang) * len * 0.55 + BO.rand(-7, 7);
+        b.branches.push([[bx, by], [mx, my], [bx + Math.cos(ang) * len, by + Math.sin(ang) * len]]);
+      }
+      bolts.push(b);
     },
 
     // starburst flash at an impact point (competitor-style 4-point star + ring)
@@ -191,6 +215,16 @@
           ctx.fillStyle = p.color;
           ctx.fillRect(-p.s / 2, -p.s / 2, p.s, p.s * 0.7);
           ctx.restore();
+        } else if (p.kind === 'smoke') {
+          const grow = p.s * (1.6 - p.life * 0.6);
+          const sg = ctx.createRadialGradient(p.x, p.y, 1, p.x, p.y, grow);
+          sg.addColorStop(0, 'rgba(140,140,150,' + (0.20 * p.life) + ')');
+          sg.addColorStop(1, 'rgba(140,140,150,0)');
+          ctx.globalAlpha = 1;
+          ctx.fillStyle = sg;
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, grow, 0, BO.TAU);
+          ctx.fill();
         } else {
           ctx.beginPath();
           ctx.arc(p.x, p.y, p.s * p.life, 0, BO.TAU);
@@ -212,8 +246,22 @@
         ctx.beginPath();
         b.pts.forEach((p, i) => i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1]));
         ctx.stroke();
+        // forked branches, thinner and fading faster
+        if (b.branches && b.branches.length) {
+          ctx.globalAlpha = k * k;
+          ctx.lineWidth = 3.5;
+          for (const br of b.branches) {
+            ctx.beginPath();
+            br.forEach((p, i) => i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1]));
+            ctx.stroke();
+          }
+          ctx.globalAlpha = k;
+        }
         ctx.strokeStyle = '#fff';
         ctx.lineWidth = 2.5;
+        ctx.shadowBlur = 0;
+        ctx.beginPath();
+        b.pts.forEach((p, i) => i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1]));
         ctx.stroke();
         ctx.restore();
       }

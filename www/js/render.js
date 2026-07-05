@@ -35,6 +35,8 @@
 
   // ---------- brick texture (cached) ----------
   // shape: 'rect' | 'bl' | 'br' | 'tl' | 'tr'  (triangle solid corner)
+  // Candy-glass look: deep base, chamfered 3D edges, curved gloss band,
+  // inner rim light and a corner sparkle.
   const texCache = {};
   R.brickTex = function (color, w, h, shape) {
     const key = color + '_' + (w | 0) + '_' + (h | 0) + '_' + shape;
@@ -46,56 +48,109 @@
     cv.height = Math.max(2, (h * S) | 0);
     const c = cv.getContext('2d');
     c.scale(S, S);
-    const r = Math.min(9, w * 0.12);
+    const r = Math.min(12, w * 0.14);
+    const bev = Math.max(4, w * 0.075);   // chamfer width
 
-    // clip path
-    c.beginPath();
-    if (shape === 'rect') {
-      R.roundRect(c, 0, 0, w, h, r);
-    } else {
-      // right triangle: name = solid right-angle corner
-      if (shape === 'bl') { c.moveTo(1, 1); c.lineTo(1, h - 1); c.lineTo(w - 1, h - 1); }
-      if (shape === 'br') { c.moveTo(w - 1, 1); c.lineTo(w - 1, h - 1); c.lineTo(1, h - 1); }
-      if (shape === 'tl') { c.moveTo(1, 1); c.lineTo(w - 1, 1); c.lineTo(1, h - 1); }
-      if (shape === 'tr') { c.moveTo(1, 1); c.lineTo(w - 1, 1); c.lineTo(w - 1, h - 1); }
-      c.closePath();
-    }
-    c.save();
-    c.clip();
-
-    // base gradient
-    const g = c.createLinearGradient(0, 0, 0, h);
-    g.addColorStop(0, R.shade(color, 0.16));
-    g.addColorStop(0.45, color);
-    g.addColorStop(1, R.shade(color, -0.14));
-    c.fillStyle = g;
-    c.fillRect(0, 0, w, h);
-
-    // mortar lines (brick bond pattern)
-    c.strokeStyle = 'rgba(10,10,30,0.20)';
-    c.lineWidth = 2.4;
-    const rows = 3;
-    const rh = h / rows;
-    for (let i = 1; i < rows; i++) {
-      c.beginPath(); c.moveTo(0, i * rh); c.lineTo(w, i * rh); c.stroke();
-    }
-    for (let i = 0; i < rows; i++) {
-      const off = (i % 2) ? w * 0.28 : 0;
-      for (let x = off + w * 0.36; x < w; x += w * 0.44) {
-        c.beginPath(); c.moveTo(x, i * rh); c.lineTo(x, (i + 1) * rh); c.stroke();
+    function shapePath(inset, rad) {
+      c.beginPath();
+      const i = inset;
+      if (shape === 'rect') {
+        R.roundRect(c, i, i, w - i * 2, h - i * 2, rad);
+      } else {
+        if (shape === 'bl') { c.moveTo(i, i * 1.6); c.lineTo(i, h - i); c.lineTo(w - i * 1.6, h - i); }
+        if (shape === 'br') { c.moveTo(w - i, i * 1.6); c.lineTo(w - i, h - i); c.lineTo(i * 1.6, h - i); }
+        if (shape === 'tl') { c.moveTo(i, i); c.lineTo(w - i * 1.6, i); c.lineTo(i, h - i * 1.6); }
+        if (shape === 'tr') { c.moveTo(i, i); c.lineTo(w - i, i); c.lineTo(w - i, h - i * 1.6); }
+        c.closePath();
       }
     }
-    // bevel: top highlight, bottom shadow
-    c.fillStyle = 'rgba(255,255,255,0.22)';
-    c.fillRect(0, 0, w, 4.5);
-    c.fillStyle = 'rgba(0,0,20,0.25)';
-    c.fillRect(0, h - 5.5, w, 5.5);
+
+    // --- outer dark rim (gives separation on any background)
+    shapePath(0, r + 2);
+    c.fillStyle = 'rgba(6,8,20,0.85)';
+    c.fill();
+
+    // --- chamfer layer: light from top-left
+    shapePath(1.5, r + 1);
+    const cg = c.createLinearGradient(0, 0, w * 0.6, h);
+    cg.addColorStop(0, R.shade(color, 0.55));
+    cg.addColorStop(0.5, R.shade(color, 0.05));
+    cg.addColorStop(1, R.shade(color, -0.45));
+    c.fillStyle = cg;
+    c.fill();
+
+    // --- face
+    shapePath(1.5 + bev, Math.max(3, r - bev * 0.6));
+    const g = c.createLinearGradient(0, bev, 0, h - bev);
+    g.addColorStop(0, R.shade(color, 0.18));
+    g.addColorStop(0.55, color);
+    g.addColorStop(1, R.shade(color, -0.22));
+    c.fillStyle = g;
+    c.fill();
+
+    // clip to face for the dressing layers
+    c.save();
+    shapePath(1.5 + bev, Math.max(3, r - bev * 0.6));
+    c.clip();
+
+    // subtle vertical sheen stripes (glass feel)
+    c.globalAlpha = 0.05;
+    c.fillStyle = '#ffffff';
+    for (let x = w * 0.18; x < w; x += w * 0.3) {
+      c.fillRect(x, 0, w * 0.07, h);
+    }
+    c.globalAlpha = 1;
+
+    // curved gloss band across the upper third
+    const gl = c.createLinearGradient(0, bev, 0, h * 0.52);
+    gl.addColorStop(0, 'rgba(255,255,255,0.50)');
+    gl.addColorStop(0.7, 'rgba(255,255,255,0.14)');
+    gl.addColorStop(1, 'rgba(255,255,255,0)');
+    c.fillStyle = gl;
+    c.beginPath();
+    c.moveTo(0, bev);
+    c.lineTo(w, bev);
+    c.lineTo(w, h * 0.30);
+    c.quadraticCurveTo(w * 0.5, h * 0.52, 0, h * 0.36);
+    c.closePath();
+    c.fill();
+
+    // inner bottom glow (light bounce)
+    const bg = c.createLinearGradient(0, h * 0.72, 0, h - bev);
+    bg.addColorStop(0, 'rgba(255,255,255,0)');
+    bg.addColorStop(1, R.rgba ? 'rgba(255,255,255,0.10)' : 'rgba(255,255,255,0.10)');
+    c.fillStyle = bg;
+    c.fillRect(0, h * 0.72, w, h * 0.28);
+
+    // inner rim light (1px bright outline just inside the face)
+    shapePath(2.5 + bev, Math.max(2, r - bev));
+    c.strokeStyle = 'rgba(255,255,255,0.28)';
+    c.lineWidth = 1.6;
+    c.stroke();
     c.restore();
 
-    // outline
-    c.lineWidth = 3;
-    c.strokeStyle = 'rgba(8,10,24,0.5)';
-    c.stroke();
+    // --- corner sparkle (top-left)
+    if (shape === 'rect' || shape === 'tl' || shape === 'tr') {
+      const sx = shape === 'tr' ? w - bev * 2.6 : bev * 2.6;
+      const sy = bev * 2.4;
+      const sr = Math.min(6, w * 0.05);
+      c.save();
+      c.translate(sx, sy);
+      c.fillStyle = 'rgba(255,255,255,0.9)';
+      c.beginPath();
+      for (let i = 0; i < 8; i++) {
+        const a = i * Math.PI / 4;
+        const rr = i % 2 === 0 ? sr : sr * 0.36;
+        i ? c.lineTo(Math.cos(a) * rr, Math.sin(a) * rr) : c.moveTo(Math.cos(a) * rr, Math.sin(a) * rr);
+      }
+      c.closePath();
+      c.fill();
+      c.beginPath();
+      c.arc(sr * 0.9, sr * 0.9, sr * 0.28, 0, BO.TAU);
+      c.fillStyle = 'rgba(255,255,255,0.5)';
+      c.fill();
+      c.restore();
+    }
 
     texCache[key] = cv;
     return cv;
