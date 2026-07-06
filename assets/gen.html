@@ -19,55 +19,181 @@
   cv.width = S; cv.height = S;
   const ctx = cv.getContext('2d');
   const R = BO.R;
+  const D = Math.PI / 180;
+
+  function shade(hex, f) { // f<1 darker, f>1 lighter (matches store-listing compositor)
+    const n = parseInt(hex.slice(1), 16);
+    const c = i => Math.max(0, Math.min(255, Math.round(((n >> i) & 255) * f)));
+    return `rgb(${c(16)},${c(8)},${c(0)})`;
+  }
 
   function bg() {
-    const g = ctx.createLinearGradient(0, 0, 0, S);
-    g.addColorStop(0, '#232848');
-    g.addColorStop(0.55, '#1b2036');
-    g.addColorStop(1, '#141827');
+    const g = ctx.createLinearGradient(S * 0.37, 0, S * 0.63, S);
+    g.addColorStop(0, '#2a3054');
+    g.addColorStop(0.48, '#1e2338');
+    g.addColorStop(1, '#12162a');
     ctx.fillStyle = g;
     ctx.fillRect(0, 0, S, S);
-    const rg = ctx.createRadialGradient(S / 2, S * 0.42, S * 0.05, S / 2, S * 0.42, S * 0.7);
-    rg.addColorStop(0, 'rgba(90,110,220,0.18)');
-    rg.addColorStop(1, 'rgba(90,110,220,0)');
-    ctx.fillStyle = rg;
-    ctx.fillRect(0, 0, S, S);
-  }
-
-  // brick motif: 2 rows of bricks + ball smashing through
-  function motif(cx, cy, u) {
-    // u = brick cell size
-    const defs = [
-      [-1.55, -1.05, '#2f7be8'], [-0.5, -1.05, '#ea3e9b'], [0.55, -1.05, '#f58b1f'],
-      [-1.05, 0.0, '#63c72f'], [0.02, 0.0, '#9450e8'],
+    // color glows (same trio as the store icon)
+    const glows = [
+      [S * 0.14, S * 0.10, S * 0.42, '#3d5bff', 0.30],
+      [S * 1.00, S * 1.04, S * 0.42, '#9450e8', 0.26],
+      [S * 0.49, S * 0.72, S * 0.38, '#ea3e9b', 0.12],
     ];
-    for (const [dx, dy, col] of defs) {
-      const w = u, h = u * 0.62;
-      const tex = R.brickTex(col, 220, 136, 'rect');
-      ctx.drawImage(tex, cx + dx * u, cy + dy * h * 1.62, w, h);
+    for (const [x, y, r, col, a] of glows) {
+      const rg = ctx.createRadialGradient(x, y, 0, x, y, r);
+      rg.addColorStop(0, R.rgba(col, a));
+      rg.addColorStop(1, R.rgba(col, 0));
+      ctx.fillStyle = rg;
+      ctx.fillRect(0, 0, S, S);
     }
-    // ball below with motion streak
-    const bx = cx + u * 0.75, by = cy + u * 1.15;
-    ctx.save();
-    ctx.strokeStyle = 'rgba(90,208,46,0.5)';
-    ctx.lineCap = 'round';
-    ctx.lineWidth = u * 0.30;
-    ctx.beginPath();
-    ctx.moveTo(bx - u * 1.5, by + u * 0.9);
-    ctx.lineTo(bx, by);
-    ctx.stroke();
-    ctx.restore();
-    R.drawBall(ctx, bx, by, u * 0.30, BO.SKINS[0], 0);
+    // faint dot grid
+    ctx.fillStyle = 'rgba(255,255,255,0.05)';
+    const step = S / 8;
+    for (let y = step / 2; y < S; y += step)
+      for (let x = step / 2; x < S; x += step) {
+        ctx.beginPath(); ctx.arc(x, y, S * 0.0043, 0, BO.TAU); ctx.fill();
+      }
   }
 
+  // ---- new motif: numbered bricks, one just smashed, ball streaking through ----
+  // Layout is authored in 512-space (mirrors store-listing/_src/compose.html icon()).
+  function motif(k, ox, oy) {
+    const X = x => ox + x * k, Y = y => oy + y * k;
+
+    function brick(x, y, s, color, num, rot) {
+      s *= k;
+      ctx.save();
+      ctx.translate(X(x) + s / 2, Y(y) + s / 2);
+      ctx.rotate(rot * D);
+      const r = s * 0.22;
+      // drop shadow
+      ctx.shadowColor = 'rgba(0,0,0,0.45)';
+      ctx.shadowBlur = s * 0.30;
+      ctx.shadowOffsetY = s * 0.13;
+      const g = ctx.createLinearGradient(0, -s / 2, 0, s / 2);
+      g.addColorStop(0, shade(color, 1.45));
+      g.addColorStop(0.52, color);
+      g.addColorStop(1, shade(color, 0.72));
+      R.roundRect(ctx, -s / 2, -s / 2, s, s, r);
+      ctx.fillStyle = g;
+      ctx.fill();
+      ctx.shadowColor = 'transparent';
+      // inset light (top) / dark (bottom)
+      ctx.save();
+      R.roundRect(ctx, -s / 2, -s / 2, s, s, r);
+      ctx.clip();
+      let ig = ctx.createLinearGradient(0, -s / 2, 0, -s / 2 + s * 0.30);
+      ig.addColorStop(0, 'rgba(255,255,255,0.38)');
+      ig.addColorStop(1, 'rgba(255,255,255,0)');
+      ctx.fillStyle = ig;
+      ctx.fillRect(-s / 2, -s / 2, s, s * 0.30);
+      ig = ctx.createLinearGradient(0, s / 2 - s * 0.26, 0, s / 2);
+      ig.addColorStop(0, 'rgba(0,0,0,0)');
+      ig.addColorStop(1, 'rgba(0,0,0,0.28)');
+      ctx.fillStyle = ig;
+      ctx.fillRect(-s / 2, s / 2 - s * 0.26, s, s * 0.26);
+      // gloss blob (top-left)
+      ctx.fillStyle = 'rgba(255,255,255,0.5)';
+      ctx.filter = `blur(${s * 0.045}px)`;
+      ctx.beginPath();
+      ctx.ellipse(-s * 0.23, -s * 0.33, s * 0.17, s * 0.10, 0, 0, BO.TAU);
+      ctx.fill();
+      ctx.filter = 'none';
+      ctx.restore();
+      // number
+      if (num !== '') {
+        ctx.font = '900 ' + s * 0.44 + 'px ' + BO.FONT;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.shadowColor = 'rgba(10,12,26,0.62)';
+        ctx.shadowBlur = s * 0.045;
+        ctx.shadowOffsetY = s * 0.03;
+        ctx.fillStyle = '#fff';
+        ctx.fillText(num, 0, s * 0.02);
+        ctx.shadowColor = 'transparent';
+      }
+      ctx.restore();
+    }
+
+    // brick grid, one brick just smashed (gap in row 2)
+    brick( 38,  64, 136, '#2f7be8', '9',  -3);
+    brick(188,  58, 136, '#ea3e9b', '27', -4);
+    brick(338,  64, 136, '#f58b1f', '14', -2);
+    brick( 48, 214, 136, '#63c72f', '6',  -5);
+    brick(348, 208, 136, '#9450e8', '8',  -3);
+    // flying fragments of the destroyed brick
+    brick(212, 172, 30, '#9450e8', '',  22);
+    brick(292, 152, 22, '#9450e8', '', -18);
+    brick(332, 200, 16, '#ea3e9b', '',  32);
+    brick(178, 238, 15, '#9450e8', '', -26);
+    brick(316, 248, 24, '#9450e8', '',  48);
+
+    // ball trail (streaking up-right toward the gap)
+    ctx.save();
+    ctx.translate(X(90), Y(471));
+    ctx.rotate(-34.7 * D);
+    const tl = 250 * k, th = 42 * k;
+    const tg = ctx.createLinearGradient(0, 0, tl, 0);
+    tg.addColorStop(0, 'rgba(99,199,47,0)');
+    tg.addColorStop(1, 'rgba(99,199,47,0.6)');
+    ctx.filter = `blur(${5 * k}px)`;
+    ctx.fillStyle = tg;
+    R.roundRect(ctx, 0, -th / 2, tl, th, th / 2);
+    ctx.fill();
+    ctx.filter = 'none';
+    ctx.restore();
+
+    // ball with glow
+    const bx = X(291), by = Y(331), br = 46 * k;
+    const bgw = ctx.createRadialGradient(bx, by, br * 0.4, bx, by, br * 2.2);
+    bgw.addColorStop(0, 'rgba(90,208,46,0.40)');
+    bgw.addColorStop(1, 'rgba(90,208,46,0)');
+    ctx.fillStyle = bgw;
+    ctx.beginPath(); ctx.arc(bx, by, br * 2.2, 0, BO.TAU); ctx.fill();
+    R.drawBall(ctx, bx, by, br, BO.SKINS[0], 0);
+
+    // impact flash at the gap
+    const fx = X(300), fy = Y(284);
+    const fg = ctx.createRadialGradient(fx, fy, 0, fx, fy, 32 * k);
+    fg.addColorStop(0, 'rgba(255,255,255,0.95)');
+    fg.addColorStop(0.7, 'rgba(255,255,255,0.25)');
+    fg.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = fg;
+    ctx.beginPath(); ctx.arc(fx, fy, 32 * k, 0, BO.TAU); ctx.fill();
+    for (const rot of [12, 102]) {
+      ctx.save();
+      ctx.translate(fx, fy);
+      ctx.rotate(rot * D);
+      const sg = ctx.createLinearGradient(-60 * k, 0, 60 * k, 0);
+      sg.addColorStop(0, 'rgba(255,255,255,0)');
+      sg.addColorStop(0.45, 'rgba(255,255,255,0.9)');
+      sg.addColorStop(0.55, 'rgba(255,255,255,0.9)');
+      sg.addColorStop(1, 'rgba(255,255,255,0)');
+      ctx.fillStyle = sg;
+      R.roundRect(ctx, -60 * k, -5 * k, 120 * k, 10 * k, 5 * k);
+      ctx.fill();
+      ctx.restore();
+    }
+
+    // sparkles
+    for (const [x, y, r, a] of [[127, 387, 7, 0.8], [425, 155, 5, 0.7]]) {
+      ctx.fillStyle = 'rgba(255,255,255,' + a + ')';
+      ctx.beginPath(); ctx.arc(X(x), Y(y), r * k, 0, BO.TAU); ctx.fill();
+    }
+  }
+
+  // content bbox in 512-space is ~(38..474, 58..440), center ~(256, 250)
   if (mode === 'iconbg') {
     bg();
   } else if (mode === 'iconfg') {
-    // transparent, content within center 66% safe zone
-    motif(S / 2, S / 2 - S * 0.02, S * 0.19);
+    // transparent foreground; launchers show ~the center 2/3 of the canvas,
+    // so scale content to ~70% width to visually fill the masked tile
+    const k = 1.62;
+    motif(k, S / 2 - 256 * k, S / 2 - 250 * k);
   } else if (mode === 'icon') {
     bg();
-    motif(S / 2, S / 2 - S * 0.02, S * 0.24);
+    motif(2, 0, S / 2 - 250 * 2);
   } else if (mode === 'splash') {
     bg();
     const logo = R.logo(1500);

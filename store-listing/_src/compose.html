@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<!-- Play Store listing compositor. Open with ?slide=p1..p4|l1|l2 -->
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 100%; height: 100%; overflow: hidden; }
+  body {
+    font-family: 'Arial Black', 'Avenir-Black', 'Helvetica Neue', Arial, sans-serif;
+    background: #141827;
+  }
+  #stage { position: relative; overflow: hidden; }
+  #stage.portrait  { width: 1080px; height: 1920px; }
+  #stage.landscape { width: 1920px; height: 1080px; }
+  #stage.icon      { width: 512px; height: 512px; }
+  #stage.feature   { width: 1024px; height: 500px; }
+
+  /* ---------- background ---------- */
+  .bg {
+    position: absolute; inset: 0;
+    background: linear-gradient(165deg, #2a3054 0%, #1e2338 48%, #12162a 100%);
+  }
+  .dots {
+    position: absolute; inset: 0;
+    background-image: radial-gradient(rgba(255,255,255,0.05) 2.2px, transparent 2.6px);
+    background-size: 64px 64px;
+  }
+  .glow { position: absolute; border-radius: 50%; filter: blur(90px); }
+  .vignette {
+    position: absolute; inset: 0;
+    background: radial-gradient(ellipse 95% 85% at 50% 45%, transparent 62%, rgba(6,8,18,0.42) 100%);
+  }
+
+  /* ---------- decorations ---------- */
+  .brick {
+    position: absolute; display: flex; align-items: center; justify-content: center;
+    border-radius: 22%;
+    color: #fff; text-shadow: 0 3px 6px rgba(10,12,26,0.62);
+    box-shadow: inset 0 4px 8px rgba(255,255,255,0.38), inset 0 -8px 14px rgba(0,0,0,0.28),
+                0 18px 40px rgba(0,0,0,0.45);
+  }
+  .brick .shine {
+    position: absolute; left: 10%; top: 7%; width: 34%; height: 20%;
+    border-radius: 50%; background: rgba(255,255,255,0.5); filter: blur(6px);
+  }
+  .tri {
+    position: absolute;
+    clip-path: polygon(0 0, 100% 100%, 0 100%);
+    border-radius: 0;
+  }
+  .ball { position: absolute; border-radius: 50%; }
+  .trail { position: absolute; border-radius: 999px; filter: blur(5px); }
+
+  /* ---------- phone mockup ---------- */
+  .phone {
+    position: absolute;
+    background: linear-gradient(180deg, #454d72 0%, #262c45 30%, #1b2036 100%);
+    border-radius: 64px;
+    padding: 17px;
+    box-shadow: 0 0 0 3px rgba(150,165,220,0.28), 0 60px 130px rgba(0,0,0,0.62),
+                0 0 120px rgba(80,110,230,0.18);
+  }
+  .phone img { display: block; width: 100%; border-radius: 48px; }
+  .phone-glow { position: absolute; border-radius: 50%; filter: blur(110px); }
+
+  /* ---------- typography ---------- */
+  .headline {
+    position: absolute; width: 100%; text-align: center;
+    font-style: italic; text-transform: uppercase; line-height: 1.04;
+    color: #fff; letter-spacing: 1px;
+    text-shadow: 0 6px 0 rgba(10,13,26,0.9), 0 14px 34px rgba(0,0,0,0.55);
+  }
+  .headline .accent {
+    background-clip: text; -webkit-background-clip: text; color: transparent;
+    filter: drop-shadow(0 6px 0 rgba(10,13,26,0.9)) drop-shadow(0 10px 26px rgba(0,0,0,0.5));
+    text-shadow: none;
+  }
+  .subline {
+    position: absolute; width: 100%; text-align: center;
+    color: #aeb6d8; letter-spacing: 2.5px; text-transform: uppercase;
+    text-shadow: 0 3px 10px rgba(0,0,0,0.6);
+  }
+  .chip {
+    display: inline-flex; align-items: center; gap: 14px;
+    border-radius: 999px; font-style: italic; text-transform: uppercase;
+    color: #fff; text-shadow: 0 2px 4px rgba(10,13,26,0.7);
+    box-shadow: inset 0 3px 8px rgba(255,255,255,0.22), inset 0 -5px 10px rgba(0,0,0,0.3),
+                0 12px 26px rgba(0,0,0,0.4);
+  }
+</style>
+</head>
+<body>
+<div id="stage"></div>
+<script>
+const qs = new URLSearchParams(location.search);
+const SLIDE = qs.get('slide') || 'p1';
+const stage = document.getElementById('stage');
+
+const T = { green:'#63c72f', blue:'#2f7be8', pink:'#ea3e9b', orange:'#f58b1f',
+            red:'#e04444', purple:'#9450e8', teal:'#22bfae', gold:'#ffc21c' };
+
+function el(cls, css, html) {
+  const d = document.createElement('div');
+  d.className = cls;
+  Object.assign(d.style, css || {});
+  if (html) d.innerHTML = html;
+  stage.appendChild(d);
+  return d;
+}
+function shade(hex, f) { // f<1 darker, f>1 lighter
+  const n = parseInt(hex.slice(1), 16);
+  const c = i => Math.max(0, Math.min(255, Math.round(((n >> i) & 255) * f)));
+  return `rgb(${c(16)},${c(8)},${c(0)})`;
+}
+function bg(glows) {
+  el('bg'); el('dots');
+  for (const [x, y, w, h, color, a] of glows)
+    el('glow', { left: x+'px', top: y+'px', width: w+'px', height: h+'px',
+                 background: color, opacity: a });
+}
+function brick(x, y, s, color, num, rot, opacity, tri) {
+  const b = el('brick' + (tri ? ' tri' : ''), {
+    left: x+'px', top: y+'px', width: s+'px', height: s+'px',
+    background: `linear-gradient(180deg, ${shade(color,1.45)} 0%, ${color} 52%, ${shade(color,0.72)} 100%)`,
+    transform: `rotate(${rot}deg)`, opacity: opacity,
+    fontSize: (s*0.42)+'px',
+  }, tri ? '' : `<div class="shine"></div>${num||''}`);
+  return b;
+}
+function ball(x, y, r, color, opacity, trailAngle) {
+  if (trailAngle !== undefined) {
+    const tl = r * 5.2;
+    el('trail', {
+      left: (x + r - tl)+'px', top: (y + r*0.45)+'px', width: tl+'px', height: (r*1.1)+'px',
+      background: `linear-gradient(90deg, transparent, ${color})`,
+      opacity: opacity*0.55,
+      transform: `rotate(${trailAngle}deg)`, transformOrigin: `${tl - r}px 50%`,
+    });
+  }
+  el('ball', {
+    left: x+'px', top: y+'px', width: (r*2)+'px', height: (r*2)+'px',
+    background: `radial-gradient(circle at 34% 30%, ${shade(color,1.7)}, ${color} 55%, ${shade(color,0.6)})`,
+    boxShadow: `0 0 ${r*1.6}px ${color}66, 0 ${r*0.5}px ${r}px rgba(0,0,0,0.4)`,
+    opacity: opacity,
+  });
+}
+function phone(src, x, y, w, rot, z, glowColor) {
+  if (glowColor) el('phone-glow', {
+    left: (x - w*0.15)+'px', top: (y + w*0.3)+'px', width: (w*1.3)+'px', height: (w*1.9)+'px',
+    background: glowColor, opacity: 0.35, zIndex: z-1,
+  });
+  const p = el('phone', { left: x+'px', top: y+'px', width: w+'px',
+                          transform: `rotate(${rot}deg)`, zIndex: z });
+  p.innerHTML = `<img src="../_raw/${src}">`;
+  return p;
+}
+function headline(y, size, html) {
+  el('headline', { top: y+'px', fontSize: size+'px' }, html);
+}
+function subline(y, size, text, color) {
+  el('subline', { top: y+'px', fontSize: size+'px', color: color || '#aeb6d8' }, text);
+}
+function accent(text, c1, c2) {
+  return `<span class="accent" style="background-image:linear-gradient(180deg,${c1} 20%,${c2} 85%)">${text}</span>`;
+}
+function chipRow(y, chips, size, gap, cx) {
+  const wrap = el('', { position:'absolute', top: y+'px', left: 0, width: (cx?cx*2:stage.offsetWidth)+'px',
+    display:'flex', justifyContent:'center', gap: gap+'px', zIndex: 20 });
+  for (const [text, color] of chips) {
+    const c = document.createElement('div');
+    c.className = 'chip';
+    Object.assign(c.style, {
+      background: `linear-gradient(180deg, ${shade(color,1.35)} 0%, ${color} 55%, ${shade(color,0.7)} 100%)`,
+      fontSize: size+'px', padding: `${size*0.55}px ${size*1.25}px`,
+    });
+    c.textContent = text;
+    wrap.appendChild(c);
+  }
+}
+
+// -------------------- portrait decorations (shared) --------------------
+function portraitDeco(c1, c2) {
+  brick(-55, 330, 170, c1, 14, -14, 0.95);
+  brick(950, 300, 180, c2, 27, 12, 0.95);
+  brick(60, 1500, 130, T.teal, 8, 18, 0.5);
+  brick(920, 1560, 150, T.pink, 21, -16, 0.5);
+  brick(190, 400, 74, T.gold, '', 24, 0.35);
+  brick(830, 460, 64, T.green, '', -20, 0.35);
+  ball(140, 520, 26, T.green, 0.95, 38);
+  ball(880, 560, 22, T.gold, 0.9, 150);
+  ball(60, 1200, 18, T.blue, 0.4);
+  ball(1000, 1150, 16, T.purple, 0.4);
+}
+
+const SLIDES = {
+  // ---------------- P1: SHOOT & SMASH ----------------
+  p1() {
+    stage.className = 'portrait';
+    bg([[ -250, -300, 900, 900, T.orange, 0.22 ], [ 600, 1400, 900, 900, T.purple, 0.18 ],
+        [ 250, 700, 700, 700, '#3d5bff', 0.12 ]]);
+    portraitDeco(T.orange, T.blue);
+    headline(105, 150, `SHOOT &amp;<br>${accent('SMASH!', '#ffd94e', '#f8681e')}`);
+    subline(455, 40, 'Unleash a storm of balls');
+    phone('classic12b_phone.png', 163, 545, 720, -2.5, 10, T.orange + '55');
+    el('vignette', { zIndex: 30 });
+  },
+  // ---------------- P2: AIM THE PERFECT SHOT ----------------
+  p2() {
+    stage.className = 'portrait';
+    bg([[ -250, -300, 900, 900, '#2e8cf0', 0.22 ], [ 650, 1450, 900, 900, T.teal, 0.16 ],
+        [ 250, 700, 700, 700, T.purple, 0.12 ]]);
+    portraitDeco(T.blue, T.pink);
+    headline(115, 110, `AIM THE<br>${accent('PERFECT', '#6fd8ff', '#2e8cf0')} SHOT`);
+    subline(385, 38, 'Preview every ricochet');
+    phone('aim_phone.png', 163, 475, 720, 2.5, 10, '#2e8cf055');
+    el('vignette', { zIndex: 30 });
+  },
+  // ---------------- P3: MASTER 3 GAME MODES ----------------
+  p3() {
+    stage.className = 'portrait';
+    bg([[ -250, -300, 900, 900, T.purple, 0.24 ], [ 650, 1450, 900, 900, T.pink, 0.16 ],
+        [ 250, 700, 700, 700, '#3d5bff', 0.12 ]]);
+    portraitDeco(T.purple, T.green);
+    headline(115, 110, `MASTER<br>${accent('3 GAME MODES', '#ff5cb8', '#8850e8')}`);
+    chipRow(390, [['Classic', T.blue], ['Gravity', T.purple], ['Limit', T.orange]], 34, 26);
+    phone('gravity_phone.png', 163, 530, 720, -2.5, 10, T.purple + '55');
+    el('vignette', { zIndex: 30 });
+  },
+  // ---------------- P4: UNLOCK EPIC BALL SKINS ----------------
+  p4() {
+    stage.className = 'portrait';
+    bg([[ -250, -300, 900, 900, T.green, 0.20 ], [ 650, 1450, 900, 900, '#2e8cf0', 0.16 ],
+        [ 250, 700, 700, 700, T.gold, 0.10 ]]);
+    portraitDeco(T.green, T.gold);
+    ball(190, 1700, 34, T.orange, 0.9);
+    ball(940, 1250, 30, '#35c4ee', 0.9);
+    headline(115, 116, `UNLOCK ${accent('EPIC', '#b8f36a', '#28b45c')}<br>BALL SKINS`);
+    subline(395, 38, 'Earn gems &nbsp;•&nbsp; Collect them all');
+    phone('shop.png', 163, 485, 720, 2.5, 10, T.green + '55');
+    el('vignette', { zIndex: 30 });
+  },
+  // ---------------- feature graphic (Play listing header, 1024x500) ----------------
+  feature() {
+    stage.className = 'feature';
+    bg([[ -200, -250, 700, 700, '#3d5bff', 0.26 ], [ 700, 150, 700, 700, T.purple, 0.24 ],
+        [ 280, 220, 520, 520, T.pink, 0.11 ]]);
+    // decorative bricks & balls around the edges
+    brick(-45, 330, 155, T.pink, 27, 14, 0.92);
+    brick(58, 34, 96, T.gold, 12, -16, 0.75);
+    brick(880, 40, 128, T.green, 16, -12, 0.88);
+    brick(925, 345, 118, T.blue, 9, 18, 0.85);
+    brick(818, 250, 34, T.purple, '', 24, 0.8);
+    brick(180, 170, 26, T.teal, '', -20, 0.6);
+    // ball streaking under the logo
+    el('trail', {
+      left: '560px', top: '430px', width: '210px', height: '34px',
+      background: `linear-gradient(90deg, transparent, ${T.green})`, opacity: 0.55,
+      transform: 'rotate(-18deg)', transformOrigin: '0 50%',
+    });
+    ball(730, 368, 30, '#5ad02e', 1, undefined);
+    ball(255, 425, 16, T.gold, 0.85, 200);
+    ball(120, 300, 7, '#ffffff', 0.7);
+    ball(905, 180, 6, '#ffffff', 0.7);
+    // logo + tagline
+    const letters = [['B','#f0389c'],['R','#f8681e'],['I','#f8a01e'],['C','#ffc61c'],['K','#58c832'],
+                     [' ',''],['O','#28b45c'],['U','#2e8cf0'],['T','#8850e8']];
+    const logoHtml = letters.map(([ch, c]) => ch === ' ' ? '<span style="width:36px;display:inline-block"></span>' :
+      `<span style="color:${c}">${ch}</span>`).join('');
+    el('', { position:'absolute', left:'0px', top:'128px', width:'1024px', textAlign:'center',
+      font:'900 132px/1 \'Arial Black\'', fontStyle:'italic', letterSpacing:'2px', zIndex:20,
+      whiteSpace:'nowrap',
+      webkitTextStroke:'9px #0d1020', paintOrder:'stroke fill',
+      textShadow:'0 10px 0 rgba(10,13,26,0.85), 0 22px 50px rgba(0,0,0,0.6)' }, logoHtml);
+    el('', { position:'absolute', left:'0px', top:'310px', width:'1024px', textAlign:'center',
+      font:'900 40px/1.2 \'Arial Black\'', fontStyle:'italic', color:'#fff', zIndex:20,
+      textShadow:'0 4px 0 rgba(10,13,26,0.9), 0 10px 26px rgba(0,0,0,0.55)' },
+      'SHOOT BALLS. BREAK BRICKS.');
+    el('vignette', { zIndex: 30 });
+  },
+  icon() {
+    stage.className = 'icon';
+    bg([[ -140, -160, 420, 420, '#3d5bff', 0.30 ], [ 300, 320, 420, 420, T.purple, 0.26 ],
+        [ 60, 180, 380, 380, T.pink, 0.12 ]]);
+    // brick grid, one brick just smashed (gap in row 2)
+    brick( 38,  64, 136, T.blue,   9,  -3, 1);
+    brick(188,  58, 136, T.pink,   27, -4, 1);
+    brick(338,  64, 136, T.orange, 14, -2, 1);
+    brick( 48, 214, 136, T.green,  6,  -5, 1);
+    brick(348, 208, 136, T.purple, 8,  -3, 1);
+    // flying fragments of the destroyed brick
+    brick(212, 172, 30, T.purple, '',  22, 0.95);
+    brick(292, 152, 22, T.purple, '', -18, 0.9);
+    brick(332, 200, 16, T.pink,   '',  32, 0.85);
+    brick(178, 238, 15, T.purple, '', -26, 0.85);
+    brick(316, 248, 24, T.purple, '',  48, 0.9);
+    // ball streaking up-right through the gap
+    const bx = 291, by = 331; // ball center
+    el('trail', {
+      left: '90px', top: '450px', width: '250px', height: '42px',
+      background: `linear-gradient(90deg, transparent, ${T.green})`, opacity: 0.6,
+      transform: 'rotate(-34.7deg)', transformOrigin: '0 50%',
+    });
+    ball(bx - 46, by - 46, 46, '#5ad02e', 1);
+    // impact flash
+    el('', { position:'absolute', left:'268px', top:'252px', width:'64px', height:'64px',
+      borderRadius:'50%', background:'radial-gradient(circle, rgba(255,255,255,0.95), rgba(255,255,255,0) 70%)',
+      filter:'blur(2px)' });
+    for (const rot of [12, 102]) el('', { position:'absolute', left:'240px', top:'274px',
+      width:'120px', height:'10px', borderRadius:'999px',
+      background:'linear-gradient(90deg, transparent, #fff 45%, #fff 55%, transparent)',
+      transform:`rotate(${rot}deg)`, opacity: 0.9 });
+    // sparkles
+    ball(120, 380, 7, '#ffffff', 0.8);
+    ball(420, 150, 5, '#ffffff', 0.7);
+  },
+  l1() {
+    stage.className = 'landscape';
+    bg([[ -300, -350, 1000, 1000, '#3d5bff', 0.20 ], [ 1300, 500, 1000, 1000, T.purple, 0.20 ],
+        [ 500, 700, 800, 800, T.pink, 0.10 ]]);
+    // decorations
+    brick(-60, 760, 190, T.pink, 27, 14, 0.9);
+    brick(180, 60, 110, T.gold, 12, -18, 0.65);
+    brick(700, 820, 120, T.teal, 9, 20, 0.55);
+    brick(1780, 40, 170, T.green, 16, -14, 0.8);
+    ball(300, 880, 26, T.green, 0.95, 30);
+    ball(760, 120, 22, T.gold, 0.85, 160);
+    ball(1740, 780, 20, '#35c4ee', 0.6);
+    // logo
+    const letters = [['B','#f0389c'],['R','#f8681e'],['I','#f8a01e'],['C','#ffc61c'],['K','#58c832'],
+                     [' ',''],['O','#28b45c'],['U','#2e8cf0'],['T','#8850e8']];
+    const logoHtml = letters.map(([ch, c]) => ch === ' ' ? '<span style="width:42px;display:inline-block"></span>' :
+      `<span style="color:${c}">${ch}</span>`).join('');
+    el('', { position:'absolute', left:'20px', top:'175px', width:'1000px', textAlign:'center',
+      font:'900 126px/1 \'Arial Black\'', fontStyle:'italic', letterSpacing:'2px', zIndex:20,
+      whiteSpace:'nowrap',
+      webkitTextStroke:'9px #0d1020', paintOrder:'stroke fill',
+      textShadow:'0 11px 0 rgba(10,13,26,0.85), 0 24px 55px rgba(0,0,0,0.6)' }, logoHtml);
+    el('', { position:'absolute', left:'70px', top:'355px', width:'900px', textAlign:'center',
+      font:'900 55px/1.25 \'Arial Black\'', fontStyle:'italic', color:'#fff', zIndex:20,
+      textShadow:'0 5px 0 rgba(10,13,26,0.9), 0 12px 30px rgba(0,0,0,0.55)' },
+      'SHOOT BALLS.<br>BREAK BRICKS.');
+    el('', { position:'absolute', left:'70px', top:'528px', width:'900px', textAlign:'center',
+      font:'700 30px/1.4 Arial', color:'#aeb6d8', letterSpacing:'3px', zIndex:20,
+      textTransform:'uppercase' }, 'The ultra-satisfying brick breaker');
+    chipRow(630, [['3 Game Modes', T.blue], ['Endless Levels', T.purple], ['Epic Boosters', T.orange]], 26, 22, 520);
+    // phone fan (right side)
+    phone('classic12_phone.png', 990, 150, 380, -8, 10, T.orange + '44');
+    phone('gravity_phone.png', 1530, 160, 380, 8, 10, T.purple + '44');
+    phone('aim_phone.png', 1230, 90, 420, 0, 12, '#2e8cf066');
+    el('vignette', { zIndex: 30 });
+  },
+  // ---------------- L2: features ----------------
+  l2() {
+    stage.className = 'landscape';
+    bg([[ -300, -350, 1000, 1000, T.teal, 0.16 ], [ 1300, 500, 1000, 1000, '#3d5bff', 0.20 ],
+        [ 600, -200, 800, 800, T.purple, 0.12 ]]);
+    brick(-60, 780, 190, T.blue, 18, 14, 0.9);
+    brick(150, 40, 110, T.pink, 21, -18, 0.6);
+    brick(1790, 60, 160, T.gold, 24, -12, 0.8);
+    ball(330, 120, 22, T.green, 0.9, 200);
+    ball(700, 860, 26, T.gold, 0.9, 20);
+    ball(1730, 820, 18, T.pink, 0.5);
+    el('headline', { top:'110px', left:'70px', width:'900px', fontSize:'96px', textAlign:'left' },
+      `ENDLESS WAYS<br>TO ${accent('PLAY', '#ffd94e', '#f8681e')}`);
+    // feature bullets
+    const feats = [
+      [T.gold,   '24 handcrafted levels + endless mode'],
+      [T.purple, 'Gravity &amp; Limit modes twist the rules'],
+      [T.blue,   'Lightning, Hammer &amp; Split boosters'],
+      [T.green,  'Earn gems &amp; unlock ball skins'],
+    ];
+    feats.forEach(([c, txt], i) => {
+      const y = 400 + i * 116;
+      brick(80, y, 62, c, '', i % 2 ? -8 : 8, 1);
+      el('', { position:'absolute', left:'178px', top:(y+11)+'px', width:'820px', zIndex:20,
+        font:'900 33px/1.2 \'Arial Black\'', fontStyle:'italic', color:'#eef1fc',
+        whiteSpace:'nowrap',
+        textShadow:'0 4px 0 rgba(10,13,26,0.85), 0 8px 22px rgba(0,0,0,0.5)' }, txt);
+    });
+    // phone fan
+    phone('limit_phone.png', 990, 150, 380, -8, 10, T.orange + '44');
+    phone('shop.png', 1530, 160, 380, 8, 10, T.green + '44');
+    phone('title.png', 1230, 90, 420, 0, 12, '#3d5bff66');
+    el('vignette', { zIndex: 30 });
+  },
+};
+
+SLIDES[SLIDE]();
+</script>
+</body>
+</html>
